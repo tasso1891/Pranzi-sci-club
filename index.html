@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Sci Club — Registro Pranzi</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#14306B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pranzi">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  :root{
+    --blue: #1D4ED8;
+    --blue-dark: #14306B;
+    --blue-soft: #DCE6FB;
+    --yellow: #F2B705;
+    --yellow-dark: #8A6300;
+    --yellow-soft: #FDF1CC;
+    --red: #C0392B;
+    --red-soft: #F6DEDA;
+    --green: #1F8A56;
+    --green-soft: #DCF1E4;
+    --ink: #16233D;
+    --ink-soft: #5C6B85;
+    --bg: #EEF3FC;
+    --card: #FFFFFF;
+    --border: #D7E1F5;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:'Segoe UI', system-ui, sans-serif; padding-bottom:110px; }
+  button, input{font-family:inherit;}
+  ::-webkit-scrollbar{display:none;}
+
+  header{ background:var(--blue-dark); padding:20px 18px 24px; position:relative; overflow:hidden; }
+  header::after{ content:""; position:absolute; top:-30px; right:-30px; width:140px; height:140px; border-radius:50%; border:2px dashed var(--blue); opacity:0.5; }
+  .eyebrow{ font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--yellow); font-weight:700; }
+  h1{ font-size:24px; font-weight:800; color:#fff; margin:2px 0 0; }
+  .stats{ display:flex; gap:10px; margin-top:14px; position:relative; }
+  .stat{ flex:1; background:rgba(255,255,255,0.1); border-radius:14px; padding:9px 11px; }
+  .stat .num{ font-size:19px; font-weight:800; color:#fff; font-variant-numeric: tabular-nums;}
+  .stat .lbl{ font-size:10.5px; color:var(--yellow-soft); margin-top:2px;}
+
+  .segmented{ display:flex; gap:6px; margin:14px 16px 0; background:#fff; border-radius:12px; padding:4px; border:1px solid var(--border); }
+  .segmented button{ flex:1; display:flex; align-items:center; justify-content:center; gap:5px; padding:9px 0; border-radius:9px; border:none; background:transparent; color:var(--ink-soft); font-weight:700; font-size:12.5px; }
+  .segmented button.active{ background:var(--blue); color:#fff; }
+
+  .searchbox{ margin:14px 16px 0; position:relative; }
+  .searchbox svg{ position:absolute; left:14px; top:13px; color:var(--ink-soft); }
+  .searchbox input{ width:100%; padding:11px 14px 11px 38px; border-radius:12px; border:1px solid var(--border); background:#fff; font-size:14px; outline:none; }
+
+  .chips{ display:flex; gap:8px; margin:12px 16px 0; overflow-x:auto; }
+  .chip{ white-space:nowrap; padding:7px 13px; border-radius:999px; border:1px solid var(--border); background:#fff; color:var(--ink-soft); font-size:12.5px; font-weight:600; }
+  .chip.active{ border-color:transparent; color:#fff; }
+  .chip.active.f-tutti{ background:var(--blue); }
+  .chip.active.f-pagare{ background:var(--red); }
+  .chip.active.f-ricaricare{ background:var(--yellow); color:var(--ink); }
+  .chip.active.f-ok{ background:var(--green); }
+
+  .list{ margin:14px 16px 0; display:flex; flex-direction:column; gap:10px; }
+  .empty{ text-align:center; color:var(--ink-soft); padding:30px 0; font-size:14px; }
+
+  .card{ background:var(--card); border-radius:16px; border:1px solid var(--border); overflow:hidden; }
+  .card-head{ width:100%; display:flex; align-items:center; gap:12px; padding:13px 14px; background:transparent; border:none; text-align:left; cursor:pointer; }
+  .avatar{ width:38px; height:38px; border-radius:50%; background:var(--blue); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+  .name-block{ flex:1; min-width:0; }
+  .name{ font-weight:700; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sub{ font-size:12px; color:var(--ink-soft); margin-top:1px; }
+  .badge{ font-size:10.5px; font-weight:700; padding:4px 9px; border-radius:999px; white-space:nowrap; }
+  .badge.OK{ color:var(--green); background:var(--green-soft); }
+  .badge.RICARICARE{ color:var(--yellow-dark); background:var(--yellow-soft); }
+  .badge.PAGARE{ color:var(--red); background:var(--red-soft); }
+  .chevron{ color:var(--ink-soft); transition:transform 0.15s; flex-shrink:0; }
+  .chevron.open{ transform:rotate(180deg); }
+
+  .card-body{ padding:0 14px 16px; border-top:1px solid var(--border); display:none; }
+  .card-body.open{ display:block; }
+
+  .status-banner{ display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:10px; font-size:12.5px; font-weight:700; margin-top:14px; margin-bottom:14px; }
+  .status-banner.OK{ background:var(--green-soft); color:var(--green); }
+  .status-banner.RICARICARE{ background:var(--yellow-soft); color:var(--yellow-dark); }
+  .status-banner.PAGARE{ background:var(--red-soft); color:var(--red); }
+
+  .row-inline{ display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .row-inline span{ font-size:12.5px; color:var(--ink-soft); font-weight:600; }
+  .row-inline input{ width:80px; padding:7px 10px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:700; }
+
+  .delete-btn{ display:flex; align-items:center; gap:5px; font-size:12px; color:var(--red); background:var(--red-soft); border:none; border-radius:8px; padding:8px 12px; margin-bottom:16px; font-weight:700; }
+
+  .month-group{ margin-bottom:12px; }
+  .month-label{ font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; }
+  .day-grid{ display:grid; grid-template-columns:repeat(6,1fr); gap:6px; }
+  .day-cell{ display:flex; flex-direction:column; align-items:center; justify-content:center; padding:6px 0; border-radius:10px; border:1.5px dashed var(--border); background:#fff; color:var(--ink-soft); cursor:pointer; }
+  .day-cell .num{ font-size:13px; font-weight:800; line-height:1.1; }
+  .day-cell.present{ border-style:solid; border-color:var(--blue); background:var(--blue); color:#fff; }
+  .day-cell svg{ margin-top:1px; }
+
+  .attendee-tag{ font-size:12px; font-weight:600; background:var(--bg); padding:5px 10px; border-radius:999px; border:1px solid var(--border); display:inline-block; }
+
+  .footer{ margin:22px 16px 0; display:flex; align-items:center; justify-content:space-between; }
+  .footer{ justify-content:flex-end; }
+  .savebar{ position:fixed; left:0; right:0; bottom:0; z-index:20; background:#fff; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .savebar .save-state{ font-size:12.5px; font-weight:600; color:var(--ink-soft); }
+  .savebar .save-state.dirty{ color:var(--yellow-dark); }
+  .save-main{ display:flex; align-items:center; gap:6px; padding:11px 22px; border-radius:12px; border:none; background:var(--green); color:#fff; font-weight:800; font-size:14px; cursor:pointer; }
+  .save-main:disabled{ background:var(--border); color:var(--ink-soft); cursor:default; }
+  .reset-btn{ display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--ink-soft); background:transparent; border:1px solid var(--border); border-radius:999px; padding:6px 11px; cursor:pointer; }
+
+  .hint{ font-size:12.5px; color:var(--ink-soft); margin:0 16px 4px; }
+
+  /* Registra tab */
+  .date-bar{ margin:14px 16px 0; display:flex; gap:8px; align-items:center; }
+  .date-bar input[type=date]{ flex:1; padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#fff; font-size:14px; font-weight:600; color:var(--ink); }
+  .quick-day-btn{ padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#fff; font-size:12.5px; font-weight:700; color:var(--blue); white-space:nowrap; }
+  .day-total{ margin:12px 16px 0; background:var(--blue); color:#fff; border-radius:14px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; }
+  .day-total .n{ font-size:22px; font-weight:800; }
+  .day-total .l{ font-size:12px; color:var(--blue-soft); }
+
+  .reg-row{ width:100%; display:flex; align-items:center; gap:12px; padding:12px 14px; background:var(--card); border:none; border-radius:14px; text-align:left; cursor:pointer; }
+  .reg-row.present{ background:var(--blue); }
+  .reg-row.present .name, .reg-row.present .sub{ color:#fff; }
+  .reg-row.present .avatar{ background:#fff; color:var(--blue); }
+  .check-circle{ width:26px; height:26px; border-radius:50%; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .reg-row.present .check-circle{ border-color:#fff; background:#fff; color:var(--blue); }
+
+  /* Add person */
+  .add-bar{ margin:14px 16px 0; }
+  .add-toggle{ width:100%; display:flex; align-items:center; justify-content:center; gap:6px; padding:11px 0; border-radius:12px; border:1.5px dashed var(--blue); background:#fff; color:var(--blue); font-weight:700; font-size:13px; }
+  .add-form{ margin-top:10px; background:#fff; border-radius:14px; border:1px solid var(--border); padding:14px; display:none; }
+  .add-form.open{ display:block; }
+  .add-form input{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:14px; margin-bottom:8px; }
+  .add-form .save{ width:100%; padding:10px 0; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:700; font-size:13.5px; }
+  .form-error{ color:var(--red); font-size:12px; font-weight:600; margin:-2px 0 8px; display:none; }
+  .form-error.show{ display:block; }
+
+  /* Lista snella dei giorni presenti (dentro Persone) */
+  .present-days{ margin-top:2px; }
+  .present-days-title{ font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+  .present-day-row{ display:flex; align-items:center; justify-content:space-between; padding:9px 10px; border-radius:10px; background:var(--bg); margin-bottom:6px; }
+  .present-day-row .lbl{ font-size:13px; font-weight:600; }
+  .present-day-row .rm{ width:24px; height:24px; border-radius:50%; border:none; background:var(--red-soft); color:var(--red); font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .no-days{ font-size:13px; color:var(--ink-soft); padding:6px 0 2px; }
+
+  .delete-btn.confirm{ background:var(--red); color:#fff; }
+
+  .reset-btn.confirm{ background:var(--red); color:#fff; border-color:var(--red); }
+
+  /* Stagioni */
+  .season-bar{ display:flex; gap:8px; margin:14px 16px 0; align-items:center; }
+  .season-chips{ display:flex; gap:6px; overflow-x:auto; flex:1; }
+  .season-chip{ white-space:nowrap; padding:7px 13px; border-radius:999px; border:1px solid var(--border); background:#fff; color:var(--ink-soft); font-size:12px; font-weight:700; }
+  .season-chip.active{ background:var(--blue); color:#fff; border-color:var(--blue); }
+  .season-add-btn{ white-space:nowrap; padding:7px 13px; border-radius:999px; border:1.5px dashed var(--blue); background:#fff; color:var(--blue); font-size:12px; font-weight:700; flex-shrink:0; }
+  .season-form{ margin:10px 16px 0; background:#fff; border-radius:14px; border:1px solid var(--border); padding:14px; display:none; }
+  .season-form.open{ display:block; }
+  .season-form input{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:14px; margin-bottom:8px; }
+  .season-form .opts{ display:flex; gap:8px; }
+  .season-form .opts button{ flex:1; padding:10px 6px; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:700; font-size:12px; }
+  .season-form .opts button.secondary{ background:var(--blue-soft); color:var(--blue-dark); }
+  .season-status{ font-size:12.5px; font-weight:600; padding:9px 11px; border-radius:9px; margin-bottom:10px; display:none; }
+  .season-status.show{ display:block; }
+  .season-status.ok{ background:var(--green-soft); color:var(--green); }
+  .season-status.err{ background:var(--red-soft); color:var(--red); }
+  .season-status.busy{ background:var(--blue-soft); color:var(--blue-dark); }
+  #seasonCreateBtn:disabled{ opacity:0.6; }
+  #login{ position:fixed; inset:0; z-index:50; background:var(--blue-dark); display:flex; align-items:center; justify-content:center; padding:24px; }
+  .lbox{ background:#fff; border-radius:18px; padding:22px; width:100%; max-width:340px; }
+  .lbox h2{ margin:2px 0 14px; color:var(--blue-dark); }
+  .lbox .eyebrow{ color:var(--yellow-dark); }
+  .lbox input{ width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border); font-size:15px; margin-bottom:8px; }
+  .lbox button{ width:100%; padding:12px 0; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:800; font-size:14px; }
+</style>
+</head>
+<body>
+<div id="login"><div class="lbox">
+  <div class="eyebrow">Sci Club</div><h2>Registro Pranzi</h2>
+  <input id="loginEmail" type="email" placeholder="Email" autocomplete="username">
+  <input id="loginPass" type="password" placeholder="Password" autocomplete="current-password">
+  <div class="form-error show" id="loginErr" style="min-height:16px"></div>
+  <button id="loginBtn">Entra</button>
+</div></div>
+
+<header>
+  <div class="eyebrow">Sci Club</div>
+  <h1>Registro Pranzi</h1>
+  <div class="stats">
+    <div class="stat"><div class="num" id="statPasti">0</div><div class="lbl">pasti totali</div></div>
+    <div class="stat"><div class="num" id="statPagato">€0</div><div class="lbl">incassato</div></div>
+    <div class="stat"><div class="num" id="statDaSistemare">0</div><div class="lbl">da sistemare</div></div>
+  </div>
+</header>
+
+<div class="season-bar">
+  <div class="season-chips" id="seasonChips"></div>
+  <button class="season-add-btn" id="seasonAddToggle">+ Nuova stagione</button>
+</div>
+<div style="margin:8px 16px 0;"><button class="reset-btn" id="seasonDelBtn">🗑 Elimina stagione</button></div>
+<div class="season-form" id="seasonForm">
+  <input id="seasonLabelInput" placeholder="Es. 2026/27">
+  <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-soft); margin-bottom:10px;">
+    <input type="checkbox" id="seasonCopyCheck" style="width:auto; margin:0;">
+    Copia l'elenco persone attuale (pasti e pagamenti azzerati)
+  </label>
+  <div class="form-error" id="seasonError">Inserisci un nome per la stagione.</div>
+  <div class="season-status" id="seasonStatus"></div>
+  <button class="save" id="seasonCreateBtn">Crea stagione</button>
+</div>
+
+<div class="segmented">
+  <button id="tabRegistra" class="active">✓ Registra</button>
+  <button id="tabPersone">👤 Persone</button>
+  <button id="tabGiorni">📅 Giorni</button>
+</div>
+
+<!-- REGISTRA -->
+<div id="registraView">
+  <div class="date-bar">
+    <input type="date" id="registerDate">
+    <button class="quick-day-btn" id="btnOggi">Oggi</button>
+    <button class="quick-day-btn" id="btnIeri">Ieri</button>
+  </div>
+  <div class="day-total">
+    <div><div class="n" id="dayTotalCount">0</div><div class="l" id="dayTotalLabel">iscritti</div></div>
+    <div class="l" style="text-align:right;">tocca un nome per segnare presente,<br>poi premi Salva</div>
+  </div>
+  <div class="searchbox">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input id="registerSearch" placeholder="Cerca per nome o cognome…">
+  </div>
+  <div class="list" id="registerList"></div>
+</div>
+
+<!-- PERSONE -->
+<div id="personeView" style="display:none;">
+  <div class="searchbox">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input id="searchInput" placeholder="Cerca per nome o cognome…">
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="add-bar">
+    <button class="add-toggle" id="addToggle">+ Aggiungi persona</button>
+    <div class="add-form" id="addForm">
+      <input id="addCognome" placeholder="Cognome">
+      <input id="addNome" placeholder="Nome">
+      <div class="form-error" id="addError">Inserisci cognome e nome.</div>
+      <button class="save" id="addSave">Aggiungi</button>
+    </div>
+  </div>
+  <div class="list" id="peopleList"></div>
+</div>
+
+<!-- GIORNI -->
+<div id="giorniView" style="display:none;">
+  <div class="hint" style="margin-top:14px;">Numero di iscritti a pranzo per ciascuna data — utile per la prenotazione in mensa.</div>
+  <div class="list" id="daysList"></div>
+</div>
+
+<div class="footer">
+  <button class="reset-btn" id="logoutBtn" style="margin-right:8px;">⎋ Esci</button>
+  <button class="reset-btn" id="resetBtn">↺ Ripristina dati originali</button>
+</div>
+
+<div class="savebar">
+  <span class="save-state" id="saveState">Tutto salvato</span>
+  <button class="save-main" id="saveBtn" disabled>💾 Salva</button>
+</div>
+
+<script>
+const PREZZO_PASTO = 13;
+const RAW_DATA = {"dates": ["2025-11-29", "2025-11-30", "2025-12-06", "2025-12-07", "2025-12-08", "2025-12-13", "2025-12-14", "2025-12-20", "2025-12-26", "2025-12-27", "2025-12-30", "2026-01-02", "2026-01-04", "2026-01-16", "2026-01-17", "2026-01-18", "2026-01-24", "2026-01-25", "2026-01-30", "2026-01-31", "2026-02-05", "2026-02-08", "2026-02-20", "2026-02-25", "2026-02-27", "2026-03-01", "2026-03-05", "2026-03-08", "2026-02-07", "2026-02-14", "2026-03-07", "2026-03-15", "2026-03-20", "2026-03-27"], "people": [{"num": 1, "cognome": "BARUCCO", "nome": "ANNA", "attendance": [1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 2, "cognome": "BERNARD", "nome": "ALEXANDRE", "attendance": [1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1], "pagato": 260}, {"num": 3, "cognome": "BIANCO", "nome": "ALLEGRA", "attendance": [0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0], "pagato": 130}, {"num": 4, "cognome": "BIANCO", "nome": "LUDOVICO", "attendance": [0, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0], "pagato": 130}, {"num": 5, "cognome": "BIZZIO", "nome": "NICOLO'", "attendance": [0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0], "pagato": 0}, {"num": 6, "cognome": "BIZZIO", "nome": "MATTEO", "attendance": [0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0], "pagato": 0}, {"num": 7, "cognome": "BONINO", "nome": "EDOARDO", "attendance": [1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1], "pagato": 130}, {"num": 9, "cognome": "BRESSA", "nome": "BIAGIO", "attendance": [0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 10, "cognome": "CARAGLIO", "nome": "BEATRICE", "attendance": [1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0], "pagato": 130}, {"num": 11, "cognome": "CARAGLIO", "nome": "ELISABETTA", "attendance": [1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1], "pagato": 260}, {"num": 12, "cognome": "CAROGGIO", "nome": "ALBERTO", "attendance": [1, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0], "pagato": 130}, {"num": 13, "cognome": "CERRINA", "nome": "ANDREA", "attendance": [0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 14, "cognome": "COLOMBO", "nome": "RUGGERO", "attendance": [0, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1], "pagato": 130}, {"num": 15, "cognome": "COPPA", "nome": "EMANUELE", "attendance": [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0], "pagato": 130}, {"num": 16, "cognome": "COPPA", "nome": "MASSIMILIANO", "attendance": [0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0], "pagato": 130}, {"num": 17, "cognome": "DEL BALZO", "nome": "LEONARDO", "attendance": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0], "pagato": 130}, {"num": 18, "cognome": "DESFORGES", "nome": "MATTIA", "attendance": [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 19, "cognome": "DRACONE", "nome": "FILIPPO", "attendance": [0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0], "pagato": 260}, {"num": 20, "cognome": "EMILIANI", "nome": "ELENA", "attendance": [1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0], "pagato": 260}, {"num": 21, "cognome": "FRANZOSI", "nome": "LEONARDO", "attendance": [0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1], "pagato": 260}, {"num": 22, "cognome": "GIORDANO", "nome": "BIANCA", "attendance": [1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0], "pagato": 260}, {"num": 23, "cognome": "GIORDANO", "nome": "SIMONE", "attendance": [1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0], "pagato": 130}, {"num": 24, "cognome": "GIROTTO", "nome": "LORENZO", "attendance": [0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0], "pagato": 260}, {"num": 25, "cognome": "GIUBERGIA", "nome": "HERMANN", "attendance": [1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 26, "cognome": "GRIGOLON", "nome": "NICOLA", "attendance": [1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "pagato": 0}, {"num": 27, "cognome": "HADJITHOMAS", "nome": "CARL", "attendance": [1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0], "pagato": 130}, {"num": 28, "cognome": "HARROCH", "nome": "ARYEL", "attendance": [1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0], "pagato": 130}, {"num": 29, "cognome": "IEZZI", "nome": "MARGHERITA", "attendance": [1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1], "pagato": 260}, {"num": 30, "cognome": "MARQUET", "nome": "VICTOR", "attendance": [0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0], "pagato": 130}, {"num": 31, "cognome": "MERIGGIO", "nome": "FILIPPO", "attendance": [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1], "pagato": 260}, {"num": 32, "cognome": "MOLLO VEGLIO", "nome": "ENEA", "attendance": [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0], "pagato": 130}, {"num": 33, "cognome": "MORELLATO", "nome": "ALLEGRA", "attendance": [0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 34, "cognome": "NECKI", "nome": "GIANMARIA", "attendance": [0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0], "pagato": 130}, {"num": 35, "cognome": "OLIVERI", "nome": "MARTINO", "attendance": [0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 36, "cognome": "PROFETA", "nome": "EVAN", "attendance": [0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 37, "cognome": "SAETTONE", "nome": "CECILIA", "attendance": [1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0], "pagato": 130}, {"num": 38, "cognome": "SCHONEICH", "nome": "GREGORIO", "attendance": [1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0], "pagato": 130}, {"num": 39, "cognome": "SIRNA", "nome": "AVA", "attendance": [0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0], "pagato": 260}, {"num": 40, "cognome": "SORDELLO", "nome": "LUCA", "attendance": [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 41, "cognome": "SPOSATO", "nome": "AGATA", "attendance": [0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0], "pagato": 130}, {"num": 42, "cognome": "TOSELLO", "nome": "JACOPO", "attendance": [0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1], "pagato": 130}, {"num": 44, "cognome": "VISINO", "nome": "PIETRO", "attendance": [0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0], "pagato": 130}, {"num": 45, "cognome": "VUCUSA", "nome": "BEATRICE", "attendance": [1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "pagato": 130}]};
+
+const dateOrder = RAW_DATA.dates.map((d,i)=>({d,i})).sort((a,b)=>a.d.localeCompare(b.d)).map(x=>x.i);
+const SORTED_DATES = dateOrder.map(i=>RAW_DATA.dates[i]);
+const MONTHS_IT = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
+const DAYS_IT = ["dom","lun","mar","mer","gio","ven","sab"];
+
+function parseDate(s){ const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
+function monthLabel(s){ const dt=parseDate(s); return `${MONTHS_IT[dt.getMonth()]} ${dt.getFullYear()}`; }
+function fmtFull(s){ const dt=parseDate(s); return `${DAYS_IT[dt.getDay()]} ${dt.getDate()} ${MONTHS_IT[dt.getMonth()]} ${dt.getFullYear()}`; }
+function initials(c,n){ return `${(c||"?")[0]}${(n||"?")[0]}`.toUpperCase(); }
+function todayISO(offsetDays){
+  const d = new Date();
+  d.setDate(d.getDate() + (offsetDays||0));
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function buildInitialPeople(){
+  return RAW_DATA.people.map(p=>{
+    const attendance = {};
+    dateOrder.forEach((origIdx, sortedIdx)=>{
+      if(p.attendance[origIdx]===1) attendance[SORTED_DATES[sortedIdx]] = 1;
+    });
+    return { id:p.num, cognome:p.cognome, nome:p.nome, attendance, pagato:p.pagato };
+  });
+}
+
+let people = [];
+let search = "";
+let statusFilter = "TUTTI";
+let expandedId = null;
+let expandedDate = null;
+let currentView = "registra";
+let registerDate = todayISO(0);
+let registerSearch = "";
+
+// --- stagioni: tutto in UN'UNICA chiave condivisa, ricostruito da zero ---
+const DEFAULT_SEASON = { id:"2025-26", label:"2025/26" };
+
+// dati condivisi nel cloud (Firestore); solo la stagione scelta resta sul dispositivo
+const STATE_KEY = "pranzi-app-v3";
+let HAS_WS = false;
+const STORAGE_OK = true;
+window.cloud = { raw:null, rev:0, base:null };
+async function storeGet(key){
+  if(key===STATE_KEY) return window.cloud.raw;
+  try{ return localStorage.getItem(key); }catch(e){ return null; }
+}
+async function storeSet(key, val){
+  if(key===STATE_KEY) return window.cloudSave(val);
+  try{ localStorage.setItem(key, val); }catch(e){}
+}
+
+let appState = { seasons:[DEFAULT_SEASON], data:{ [DEFAULT_SEASON.id]: [] } };
+let seasons = appState.seasons;
+let currentSeasonId = DEFAULT_SEASON.id;
+
+// --- business logic: auto status based on pasti pagati (pagato/13) vs pasti consumati ---
+function pastiConsumati(p){ return Object.keys(p.attendance).filter(d=>p.attendance[d]===1).length; }
+function pastiPagati(p){ return Math.floor((p.pagato||0)/PREZZO_PASTO); }
+function personStatus(p){
+  const consumati = pastiConsumati(p);
+  const pagati = pastiPagati(p);
+  const remaining = pagati - consumati;
+  if(consumati > pagati){
+    const dovuti = consumati - pagati;
+    return { code:"PAGARE", label:"Deve pagare", detail:`Deve pagare ${dovuti*PREZZO_PASTO}€ (${dovuti} past${dovuti===1?"o":"i"} extra)` };
+  }
+  if(pagati>0 && remaining<=1){
+    return { code:"RICARICARE", label:"Da ricaricare", detail: remaining===0 ? "Ultimo pasto disponibile: ricaricare" : "Manca 1 pasto: ricaricare presto" };
+  }
+  if(pagati>0 && remaining>0){
+    return { code:"OK", label:"OK", detail:`${remaining} past${remaining===1?"o":"i"} rimanent${remaining===1?"e":"i"} · da restituire ${remaining*PREZZO_PASTO}€` };
+  }
+  return { code:"OK", label:"OK", detail: "Nessuna ricarica registrata" };
+}
+
+function allDates(){
+  const set = new Set();
+  people.forEach(p=>Object.keys(p.attendance).forEach(d=>{ if(p.attendance[d]===1) set.add(d); }));
+  set.add(registerDate);
+  return [...set].sort();
+}
+
+let lastSnapshot = null;
+
+// nomi per la stagione 2026/27 (aggiunti una sola volta al primo avvio)
+const SEED_2627 = [
+  ["IEZZI","MARGHERITA"],
+  ["SAETTONE","CECILIA"],
+  ["BERNARD","ALEXANDRE"],
+  ["BIZZIO","NICOLO'"],
+  ["MARQUET","VICTOR"],
+  ["DRACONE","FILIPPO"],
+  ["CAROGGIO","ALBERTO"],
+  ["CARAGLIO","ELISABETTA"],
+  ["SIRNA","AVA"],
+  ["BIANCO","ALLEGRA"],
+  ["MORELLATO","ALLEGRA"],
+  ["COLOMBO","RUGGERO"],
+  ["BIZZIO","MATTEO"],
+  ["MERIGGIO","FILIPPO"],
+  ["BONINO","EDOARDO"],
+  ["GRIGOLON","NICOLA"],
+  ["COPPA","MASSIMILIANO"],
+  ["HADJITHOMAS","CARL"],
+  ["HARROCH","ARYEL"],
+  ["HARROCH","AMETHISTE"],
+  ["DEL BALZO","LEONARDO"],
+  ["BARUCCO","ANNA"],
+  ["GIORDANO","LUCIA"],
+  ["LUPI","MARTA"],
+  ["GIORDANO","SIMONE"],
+  ["BIANCO","LUDOVICO"],
+  ["FRANZOSI","LEONARDO"],
+  ["GIROTTO","LORENZO"],
+  ["SCHONEICH","GREGORIO"],
+  ["VIALE","MARTA"],
+  ["SORDELLO","ADELE"],
+  ["TIRI","MARIA ELENA"],
+  ["TOSELLO","JACOPO"],
+  ["BOTTERO","LUDOVICO"],
+  ["SCHONEICH","GUGLIELMO"],
+  ["GIROTTO","TOMMASO"]
+];
+
+function defaultAppState(){
+  return { seasons:[DEFAULT_SEASON], data:{ [DEFAULT_SEASON.id]: buildInitialPeople() } };
+}
+
+// scrive l'intero appState nella memoria personale. Ritorna {ok, error}.
+async function persistAppState(){
+  if(!STORAGE_OK) return { ok:false, error:"Memoria non disponibile in questa visualizzazione." };
+  try{
+    appState.data[currentSeasonId] = people;
+    await storeSet(STATE_KEY, JSON.stringify(appState));
+    return { ok:true };
+  }catch(e){
+    return { ok:false, error:(e && e.message) ? e.message : String(e) };
+  }
+}
+
+let dirty = false;
+function setSaveUI(){
+  const st = document.getElementById("saveState");
+  const btn = document.getElementById("saveBtn");
+  if(!STORAGE_OK){
+    st.textContent = "⚠️ Salvataggio non disponibile qui";
+    st.classList.remove("dirty");
+    btn.disabled = true;
+    return;
+  }
+  st.textContent = dirty ? "Modifiche non salvate" : "Tutto salvato";
+  st.classList.toggle("dirty", dirty);
+  btn.disabled = !dirty;
+}
+
+async function loadData(){
+  document.getElementById("registerDate").value = registerDate;
+  let raw = null, fromOldShared = false;
+  if(STORAGE_OK){
+    raw = await storeGet(STATE_KEY);
+    if(raw==null && HAS_WS){
+      // una tantum: recupera i dati dalla vecchia memoria condivisa
+      try{
+        const old = await window.storage.get(STATE_KEY, true);
+        if(old && old.value){ raw = old.value; fromOldShared = true; }
+      }catch(e){}
+    }
+  }
+  try{
+    if(raw){
+      appState = JSON.parse(raw);
+      if(!appState.seasons || !appState.seasons.length) appState.seasons = [DEFAULT_SEASON];
+      if(!appState.data) appState.data = {};
+      if(appState.seasons.some(s=>s.id===DEFAULT_SEASON.id) && !appState.data[DEFAULT_SEASON.id]) appState.data[DEFAULT_SEASON.id] = buildInitialPeople();
+    } else {
+      appState = defaultAppState();
+    }
+  }catch(e){
+    appState = defaultAppState();
+  }
+  let seededSeasonId = null;
+  if(!appState.seeded2627){
+    let s = appState.seasons.find(x=>/2026\s*[\/\-]\s*(20)?27/.test(x.label));
+    if(!s){ s = { id:"s2627", label:"2026/27" }; appState.seasons = [...appState.seasons, s]; }
+    const list = appState.data[s.id] = appState.data[s.id] || [];
+    let nextId = list.reduce((m,p)=>Math.max(m, p.id||0), 0) + 1;
+    SEED_2627.forEach(([c,n])=>{
+      if(!list.some(p=>p.cognome.toUpperCase()===c && p.nome.toUpperCase()===n)){
+        list.push({ id:nextId++, cognome:c, nome:n, attendance:{}, pagato:0 });
+      }
+    });
+    appState.seeded2627 = true;
+    seededSeasonId = s.id;
+  }
+  seasons = appState.seasons;
+  const pref = await storeGet("pranzi-current-season");
+  currentSeasonId = seededSeasonId || ((pref && seasons.some(s=>s.id===pref)) ? pref : seasons[seasons.length-1].id);
+  people = appState.data[currentSeasonId] || [];
+  if(fromOldShared) await persistAppState();
+  if(seededSeasonId) saveData();
+  setSaveUI();
+  render();
+}
+
+// segna che ci sono modifiche da salvare (il salvataggio avviene solo col tasto Salva)
+function saveData(){
+  dirty = true;
+  setSaveUI();
+}
+
+let savedFlashTimer = null;
+async function saveNow(){
+  if(!dirty) return;
+  const st = document.getElementById("saveState");
+  const btn = document.getElementById("saveBtn");
+  btn.disabled = true;
+  st.textContent = "Salvataggio…";
+  const r = await persistAppState();
+  if(r.ok){
+    dirty = false;
+    st.classList.remove("dirty");
+    st.textContent = "✓ Salvato";
+    clearTimeout(savedFlashTimer);
+    savedFlashTimer = setTimeout(setSaveUI, 1500);
+    btn.disabled = true;
+  } else {
+    st.textContent = "Salvataggio non riuscito: " + r.error;
+    btn.disabled = false;
+  }
+}
+
+async function switchSeason(id){
+  if(id===currentSeasonId) return;
+  appState.data[currentSeasonId] = people;
+  currentSeasonId = id;
+  seasonDelPending = false;
+  expandedId = null; expandedDate = null;
+  people = appState.data[id] || [];
+  try{ await storeSet("pranzi-current-season", id); }catch(e){}
+  render();
+}
+
+function setSeasonStatus(kind, message){
+  const el = document.getElementById("seasonStatus");
+  el.className = "season-status show " + kind;
+  el.textContent = message;
+}
+function clearSeasonStatus(){
+  const el = document.getElementById("seasonStatus");
+  el.className = "season-status";
+  el.textContent = "";
+}
+
+async function createSeason(label, copyCurrent){
+  label = (label||"").trim();
+  const errEl = document.getElementById("seasonError");
+  if(!label){ errEl.classList.add("show"); clearSeasonStatus(); return; }
+  errEl.classList.remove("show");
+
+  if(!STORAGE_OK){
+    setSeasonStatus("err", "Memoria non disponibile in questa visualizzazione: non posso creare nuove stagioni qui.");
+    return;
+  }
+
+  const btn = document.getElementById("seasonCreateBtn");
+  btn.disabled = true;
+  setSeasonStatus("busy", "Creazione in corso…");
+
+  const newId = "s" + Date.now() + Math.floor(Math.random()*1000);
+  const newPeopleData = copyCurrent
+    ? people.map(p=>({ id:p.id, cognome:p.cognome, nome:p.nome, attendance:{}, pagato:0 }))
+    : [];
+
+  const prevSeasons = appState.seasons;
+  const prevDataEntry = appState.data[newId];
+  appState.seasons = [...appState.seasons, { id:newId, label }];
+  appState.data[newId] = newPeopleData;
+
+  const result = await persistAppState();
+
+  if(!result.ok){
+    appState.seasons = prevSeasons;
+    if(prevDataEntry===undefined) delete appState.data[newId]; else appState.data[newId] = prevDataEntry;
+    btn.disabled = false;
+    setSeasonStatus("err", "Creazione non riuscita: " + result.error);
+    return;
+  }
+
+  seasons = appState.seasons;
+  btn.disabled = false;
+  setSeasonStatus("ok", `Stagione "${label}" creata!`);
+  document.getElementById("seasonLabelInput").value = "";
+  document.getElementById("seasonCopyCheck").checked = false;
+  await switchSeason(newId);
+  setTimeout(()=>{
+    document.getElementById("seasonForm").classList.remove("open");
+    clearSeasonStatus();
+  }, 900);
+}
+
+function toggleAttendanceDate(id, date){
+  const p = people.find(p=>p.id===id);
+  if(p.attendance[date]===1) delete p.attendance[date];
+  else p.attendance[date] = 1;
+  saveData(); render();
+}
+function updatePagato(id, val){
+  const p = people.find(p=>p.id===id);
+  p.pagato = Math.max(0, Number(val)||0);
+  saveData();
+  render();
+}
+let deletePendingId = null;
+let deletePendingTimer = null;
+function requestDeletePerson(id){
+  if(deletePendingId === id){
+    clearTimeout(deletePendingTimer);
+    deletePendingId = null;
+    people = people.filter(p=>p.id!==id);
+    expandedId = null;
+    saveData(); render();
+    return;
+  }
+  deletePendingId = id;
+  render();
+  clearTimeout(deletePendingTimer);
+  deletePendingTimer = setTimeout(()=>{ deletePendingId=null; render(); }, 3500);
+}
+
+function addPerson(cognome, nome){
+  cognome = (cognome||"").trim().toUpperCase();
+  nome = (nome||"").trim().toUpperCase();
+  const errEl = document.getElementById("addError");
+  if(!cognome || !nome){ errEl.classList.add("show"); return; }
+  errEl.classList.remove("show");
+  const nextId = people.length ? Math.max(...people.map(p=>p.id))+1 : 1;
+  people.push({ id: nextId, cognome, nome, attendance:{}, pagato:0 });
+  saveData(); render();
+}
+
+let resetPending = false;
+let resetPendingTimer = null;
+function requestReset(){
+  if(resetPending){
+    clearTimeout(resetPendingTimer);
+    resetPending = false;
+    people = currentSeasonId===DEFAULT_SEASON.id ? buildInitialPeople() : [];
+    expandedId = null;
+    saveData(); render();
+    return;
+  }
+  resetPending = true;
+  document.getElementById("resetBtn").classList.add("confirm");
+  document.getElementById("resetBtn").textContent = "↺ Tocca di nuovo per confermare";
+  resetPendingTimer = setTimeout(()=>{
+    resetPending = false;
+    document.getElementById("resetBtn").classList.remove("confirm");
+    document.getElementById("resetBtn").textContent = "↺ Ripristina dati originali";
+  }, 3500);
+}
+
+function computeSummary(){
+  const totalPasti = people.reduce((s,p)=>s+pastiConsumati(p),0);
+  const totalPagato = people.reduce((s,p)=>s+(p.pagato||0),0);
+  let daPagare=0, daRicaricare=0;
+  people.forEach(p=>{
+    const st = personStatus(p).code;
+    if(st==="PAGARE") daPagare++;
+    if(st==="RICARICARE") daRicaricare++;
+  });
+  document.getElementById("statPasti").textContent = totalPasti;
+  document.getElementById("statPagato").textContent = "€"+totalPagato;
+  document.getElementById("statDaSistemare").textContent = daPagare+daRicaricare;
+  return { daPagare, daRicaricare };
+}
+
+function checkIcon(){
+  return `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>`;
+}
+
+function renderChips(){
+  const {daPagare, daRicaricare} = computeSummary();
+  const defs = [
+    {key:"TUTTI", label:`Tutti (${people.length})`, cls:"f-tutti"},
+    {key:"PAGARE", label:`Da pagare (${daPagare})`, cls:"f-pagare"},
+    {key:"RICARICARE", label:`Da ricaricare (${daRicaricare})`, cls:"f-ricaricare"},
+    {key:"OK", label:"OK", cls:"f-ok"},
+  ];
+  const el = document.getElementById("chips");
+  el.innerHTML = defs.map(f=>`<button class="chip ${f.cls} ${statusFilter===f.key?"active":""}" data-filter="${f.key}">${f.label}</button>`).join("");
+  el.querySelectorAll(".chip").forEach(b=>b.addEventListener("click", ()=>{ statusFilter=b.dataset.filter; render(); }));
+}
+
+function renderPeopleList(){
+  let list = people;
+  if(statusFilter!=="TUTTI") list = list.filter(p=>personStatus(p).code===statusFilter);
+  if(search.trim()){
+    const q = search.trim().toUpperCase();
+    list = list.filter(p=>p.cognome.toUpperCase().includes(q) || p.nome.toUpperCase().includes(q));
+  }
+  list = [...list].sort((a,b)=>a.cognome.localeCompare(b.cognome) || a.nome.localeCompare(b.nome));
+
+  const container = document.getElementById("peopleList");
+  if(list.length===0){
+    container.innerHTML = `<div class="empty">Nessuno trovato per questa ricerca.</div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(p=>{
+    const isOpen = expandedId===p.id;
+    const consumati = pastiConsumati(p);
+    const st = personStatus(p);
+
+    let presentDaysHtml = "";
+    if(isOpen){
+      const presentDates = Object.keys(p.attendance).filter(d=>p.attendance[d]===1).sort().reverse();
+      presentDaysHtml = `<div class="present-days"><div class="present-days-title">Giorni presenti (${presentDates.length})</div>`;
+      if(presentDates.length===0){
+        presentDaysHtml += `<div class="no-days">Nessun pasto registrato.</div>`;
+      } else {
+        presentDaysHtml += presentDates.map(d=>`
+          <div class="present-day-row">
+            <span class="lbl">${fmtFull(d)}</span>
+            <button class="rm" data-person="${p.id}" data-date="${d}" title="Rimuovi (correggi errore)">✕</button>
+          </div>
+        `).join("");
+      }
+      presentDaysHtml += `</div>`;
+    }
+
+    return `
+      <div class="card">
+        <button class="card-head" data-toggle="${p.id}">
+          <div class="avatar">${initials(p.cognome,p.nome)}</div>
+          <div class="name-block">
+            <div class="name">${p.cognome} ${p.nome}</div>
+            <div class="sub">${consumati} pasti · €${p.pagato}</div>
+          </div>
+          <div class="badge ${st.code}">${st.label}</div>
+          <svg class="chevron ${isOpen?"open":""}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="card-body ${isOpen?"open":""}">
+          <div class="status-banner ${st.code}">${st.detail}</div>
+          <div class="row-inline">
+            <span>Pagato €</span>
+            <input type="number" value="${p.pagato}" data-pagato="${p.id}">
+            <span style="font-size:11px;">(= ${pastiPagati(p)} pasti a ${PREZZO_PASTO}€)</span>
+          </div>
+          <button class="delete-btn ${deletePendingId===p.id?"confirm":""}" data-delete="${p.id}">${deletePendingId===p.id ? "⚠️ Tocca di nuovo per confermare" : "🗑 Cancella persona"}</button>
+          ${presentDaysHtml}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  container.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click", ()=>{
+    const id = Number(b.dataset.toggle);
+    expandedId = expandedId===id ? null : id;
+    render();
+  }));
+  container.querySelectorAll("[data-pagato]").forEach(inp=>inp.addEventListener("change", ()=>{
+    updatePagato(Number(inp.dataset.pagato), inp.value);
+  }));
+  container.querySelectorAll("[data-delete]").forEach(b=>b.addEventListener("click", ()=>{
+    requestDeletePerson(Number(b.dataset.delete));
+  }));
+  container.querySelectorAll(".rm[data-person]").forEach(b=>b.addEventListener("click", ()=>{
+    toggleAttendanceDate(Number(b.dataset.person), b.dataset.date);
+  }));
+}
+
+function renderDaysList(){
+  const dates = allDates().slice().reverse();
+  const container = document.getElementById("daysList");
+  container.innerHTML = dates.map(date=>{
+    const attendees = people.filter(p=>p.attendance[date]===1);
+    const isOpen = expandedDate===date;
+    const dt = parseDate(date);
+    let tags = "";
+    if(isOpen){
+      if(attendees.length===0){
+        tags = `<div style="font-size:13px;color:var(--ink-soft);margin-top:10px;">Nessun iscritto.</div>`;
+      } else {
+        tags = `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">` +
+          attendees.slice().sort((a,b)=>a.cognome.localeCompare(b.cognome))
+            .map(a=>`<span class="attendee-tag">${a.cognome} ${a.nome}</span>`).join("") +
+          `</div>`;
+      }
+    }
+    return `
+      <div class="card">
+        <button class="card-head" data-day="${date}">
+          <div class="avatar" style="border-radius:10px;">${dt.getDate()}</div>
+          <div class="name-block">
+            <div class="name">${fmtFull(date)}</div>
+            <div class="sub">${attendees.length} iscritti a pranzo</div>
+          </div>
+          <svg class="chevron ${isOpen?"open":""}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="card-body ${isOpen?"open":""}">${tags}</div>
+      </div>
+    `;
+  }).join("");
+
+  container.querySelectorAll("[data-day]").forEach(b=>b.addEventListener("click", ()=>{
+    const date = b.dataset.day;
+    expandedDate = expandedDate===date ? null : date;
+    render();
+  }));
+}
+
+function renderRegisterList(){
+  let list = people;
+  if(registerSearch.trim()){
+    const q = registerSearch.trim().toUpperCase();
+    list = list.filter(p=>p.cognome.toUpperCase().includes(q) || p.nome.toUpperCase().includes(q));
+  }
+  list = [...list].sort((a,b)=>a.cognome.localeCompare(b.cognome) || a.nome.localeCompare(b.nome));
+
+  const presentCount = people.filter(p=>p.attendance[registerDate]===1).length;
+  document.getElementById("dayTotalCount").textContent = presentCount;
+  document.getElementById("dayTotalLabel").textContent = `iscritti · ${fmtFull(registerDate)}`;
+
+  const container = document.getElementById("registerList");
+  if(list.length===0){
+    container.innerHTML = `<div class="empty">Nessuno trovato.</div>`;
+    return;
+  }
+  container.innerHTML = list.map(p=>{
+    const present = p.attendance[registerDate]===1;
+    const consumati = pastiConsumati(p);
+    return `
+      <button class="reg-row ${present?"present":""}" data-reg="${p.id}">
+        <div class="avatar">${initials(p.cognome,p.nome)}</div>
+        <div class="name-block">
+          <div class="name">${p.cognome} ${p.nome}</div>
+          <div class="sub">${consumati} pasti totali</div>
+        </div>
+        <div class="check-circle">${present?checkIcon():""}</div>
+      </button>
+    `;
+  }).join("");
+
+  container.querySelectorAll("[data-reg]").forEach(b=>b.addEventListener("click", ()=>{
+    toggleAttendanceDate(Number(b.dataset.reg), registerDate);
+  }));
+}
+
+let seasonDelPending = false;
+let seasonDelTimer = null;
+function updateSeasonDelBtn(){
+  const b = document.getElementById("seasonDelBtn");
+  const cur = seasons.find(s=>s.id===currentSeasonId);
+  const label = cur ? cur.label : "";
+  b.disabled = seasons.length <= 1;
+  b.style.opacity = b.disabled ? "0.5" : "1";
+  b.classList.toggle("confirm", seasonDelPending);
+  b.textContent = seasonDelPending ? `🗑 Tocca di nuovo per eliminare ${label}` : `🗑 Elimina stagione ${label}`;
+}
+function requestDeleteSeason(){
+  if(seasons.length <= 1) return;
+  if(seasonDelPending){
+    clearTimeout(seasonDelTimer);
+    seasonDelPending = false;
+    const id = currentSeasonId;
+    appState.seasons = appState.seasons.filter(s=>s.id!==id);
+    delete appState.data[id];
+    seasons = appState.seasons;
+    currentSeasonId = seasons[seasons.length-1].id;
+    people = appState.data[currentSeasonId] || [];
+    expandedId = null; expandedDate = null;
+    storeSet("pranzi-current-season", currentSeasonId).catch(()=>{});
+    saveData(); render();
+    return;
+  }
+  seasonDelPending = true;
+  updateSeasonDelBtn();
+  clearTimeout(seasonDelTimer);
+  seasonDelTimer = setTimeout(()=>{ seasonDelPending = false; updateSeasonDelBtn(); }, 3500);
+}
+
+function renderSeasonChips(){
+  updateSeasonDelBtn();
+  const el = document.getElementById("seasonChips");
+  el.innerHTML = seasons.map(s=>
+    `<button class="season-chip ${s.id===currentSeasonId?"active":""}" data-season="${s.id}">${s.label}</button>`
+  ).join("");
+  el.querySelectorAll("[data-season]").forEach(b=>b.addEventListener("click", ()=>{
+    switchSeason(b.dataset.season);
+  }));
+}
+
+function render(){
+  renderSeasonChips();
+  computeSummary();
+  if(currentView==="registra"){
+    document.getElementById("registraView").style.display = "block";
+    document.getElementById("personeView").style.display = "none";
+    document.getElementById("giorniView").style.display = "none";
+    renderRegisterList();
+  } else if(currentView==="persone"){
+    document.getElementById("registraView").style.display = "none";
+    document.getElementById("personeView").style.display = "block";
+    document.getElementById("giorniView").style.display = "none";
+    renderChips();
+    renderPeopleList();
+  } else {
+    document.getElementById("registraView").style.display = "none";
+    document.getElementById("personeView").style.display = "none";
+    document.getElementById("giorniView").style.display = "block";
+    renderDaysList();
+  }
+}
+
+function setTab(tab){
+  currentView = tab;
+  document.getElementById("tabRegistra").classList.toggle("active", tab==="registra");
+  document.getElementById("tabPersone").classList.toggle("active", tab==="persone");
+  document.getElementById("tabGiorni").classList.toggle("active", tab==="giorni");
+  render();
+}
+document.getElementById("tabRegistra").addEventListener("click", ()=>setTab("registra"));
+document.getElementById("tabPersone").addEventListener("click", ()=>setTab("persone"));
+document.getElementById("tabGiorni").addEventListener("click", ()=>setTab("giorni"));
+
+document.getElementById("registerDate").addEventListener("change", (e)=>{
+  registerDate = e.target.value || todayISO(0);
+  renderRegisterList();
+});
+document.getElementById("btnOggi").addEventListener("click", ()=>{
+  registerDate = todayISO(0);
+  document.getElementById("registerDate").value = registerDate;
+  renderRegisterList();
+});
+document.getElementById("btnIeri").addEventListener("click", ()=>{
+  registerDate = todayISO(-1);
+  document.getElementById("registerDate").value = registerDate;
+  renderRegisterList();
+});
+document.getElementById("registerSearch").addEventListener("input", (e)=>{
+  registerSearch = e.target.value; renderRegisterList();
+});
+
+document.getElementById("searchInput").addEventListener("input", (e)=>{
+  search = e.target.value; renderPeopleList();
+});
+
+document.getElementById("addToggle").addEventListener("click", ()=>{
+  document.getElementById("addForm").classList.toggle("open");
+});
+document.getElementById("addSave").addEventListener("click", ()=>{
+  addPerson(document.getElementById("addCognome").value, document.getElementById("addNome").value);
+  document.getElementById("addCognome").value = "";
+  document.getElementById("addNome").value = "";
+  document.getElementById("addForm").classList.remove("open");
+});
+
+document.getElementById("resetBtn").addEventListener("click", requestReset);
+document.getElementById("saveBtn").addEventListener("click", saveNow);
+document.getElementById("seasonDelBtn").addEventListener("click", requestDeleteSeason);
+window.addEventListener("beforeunload", (e)=>{ if(dirty){ e.preventDefault(); e.returnValue = ""; } });
+
+document.getElementById("seasonAddToggle").addEventListener("click", ()=>{
+  document.getElementById("seasonForm").classList.toggle("open");
+});
+document.getElementById("seasonCreateBtn").addEventListener("click", ()=>{
+  const copy = document.getElementById("seasonCopyCheck").checked;
+  createSeason(document.getElementById("seasonLabelInput").value, copy);
+});
+document.getElementById("seasonLabelInput").addEventListener("input", ()=>document.getElementById("seasonError").classList.remove("show"));
+
+document.getElementById("addCognome").addEventListener("input", ()=>document.getElementById("addError").classList.remove("show"));
+document.getElementById("addNome").addEventListener("input", ()=>document.getElementById("addError").classList.remove("show"));
+
+window.applyRemote = function(str){
+  appState = JSON.parse(str);
+  seasons = appState.seasons;
+  if(!seasons.some(x=>x.id===currentSeasonId)) currentSeasonId = seasons[seasons.length-1].id;
+  people = appState.data[currentSeasonId] || [];
+  render();
+};
+window.startApp = loadData;
+</script>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {initializeFirestore,persistentLocalCache,doc,getDoc,onSnapshot,runTransaction,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// >>> INCOLLA QUI il blocco firebaseConfig che usi già nel gestionale <<<
+const FIREBASE_CONFIG = {
+  apiKey: "INCOLLA_API_KEY",
+  authDomain: "gestionale-422df.firebaseapp.com",
+  projectId: "gestionale-422df",
+  appId: "INCOLLA_APP_ID"
+};
+
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+const $ = id => document.getElementById(id);
+const app = initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db = initializeFirestore(app, { localCache: persistentLocalCache() });
+const ref = doc(db, "pranzi", "stato");
+const cloud = window.cloud;
+
+// unisce le modifiche locali (rispetto a base) con quelle già presenti nel cloud (r)
+function mergeState(b, l, r){
+  b = JSON.parse(b || '{"seasons":[],"data":{}}'); l = JSON.parse(l); r = JSON.parse(r);
+  const out = r;
+  l.seasons.forEach(x=>{ if(!out.seasons.some(y=>y.id===x.id) && !b.seasons.some(y=>y.id===x.id)) out.seasons.push(x); });
+  b.seasons.forEach(x=>{ if(!l.seasons.some(y=>y.id===x.id)){ out.seasons = out.seasons.filter(y=>y.id!==x.id); delete out.data[x.id]; } });
+  out.seeded2627 = out.seeded2627 || l.seeded2627;
+  out.seasons.forEach(se=>{
+    const id = se.id, B = b.data[id]||[], L = l.data[id], R = out.data[id] = out.data[id]||[];
+    if(!L) return;
+    const lm = new Set(L.map(p=>p.id));
+    L.forEach(lp=>{
+      const bp = B.find(p=>p.id===lp.id), rp = R.find(p=>p.id===lp.id);
+      if(!rp){ if(!bp) R.push(lp); return; }
+      if(!bp){ if(rp.cognome!==lp.cognome || rp.nome!==lp.nome){ lp.id = Math.max(...R.map(p=>p.id))+1; R.push(lp); } return; }
+      new Set([...Object.keys(bp.attendance), ...Object.keys(lp.attendance)]).forEach(d=>{
+        const bv = bp.attendance[d]===1, lv = lp.attendance[d]===1;
+        if(bv!==lv){ if(lv) rp.attendance[d] = 1; else delete rp.attendance[d]; }
+      });
+      rp.pagato = Math.max(0, (rp.pagato||0) + ((lp.pagato||0) - (bp.pagato||0)));
+    });
+    B.forEach(bp=>{ if(!lm.has(bp.id)){ const i = R.findIndex(p=>p.id===bp.id); if(i>=0) R.splice(i,1); } });
+  });
+  return JSON.stringify(out);
+}
+
+window.cloudSave = async function(val){
+  let out = val, merged = false, rev = 0;
+  await runTransaction(db, async tx=>{
+    const s = await tx.get(ref), r = s.exists() ? s.data() : null;
+    out = val; merged = false;
+    if(r && r.rev !== cloud.rev){ out = mergeState(cloud.base, val, r.state); merged = true; }
+    rev = (r ? r.rev : 0) + 1;
+    tx.set(ref, { state: out, rev, by: auth.currentUser.email, at: serverTimestamp() });
+  });
+  cloud.raw = cloud.base = out; cloud.rev = rev;
+  if(merged) window.applyRemote(out);
+};
+
+$("loginBtn").onclick = async ()=>{
+  $("loginErr").textContent = "";
+  try{ await signInWithEmailAndPassword(auth, $("loginEmail").value.trim(), $("loginPass").value); }
+  catch(e){ $("loginErr").textContent = "Email o password non corretti."; }
+};
+$("logoutBtn").onclick = async ()=>{ await signOut(auth); location.reload(); };
+
+let started = false;
+onAuthStateChanged(auth, async u=>{
+  $("login").style.display = u ? "none" : "flex";
+  if(!u || started) return;
+  started = true;
+  let existed = false;
+  try{
+    const s = await getDoc(ref);
+    if(s.exists()){ existed = true; const d = s.data(); cloud.raw = cloud.base = d.state; cloud.rev = d.rev; }
+  }catch(e){
+    $("login").style.display = "flex";
+    $("loginErr").textContent = "Impossibile leggere i dati: serve la connessione almeno la prima volta.";
+    started = false; return;
+  }
+  await window.startApp();
+  if(!existed) await saveNow();
+  onSnapshot(ref, s=>{
+    if(!s.exists() || s.metadata.hasPendingWrites) return;
+    const d = s.data();
+    if(d.rev === cloud.rev || dirty) return;
+    cloud.raw = cloud.base = d.state; cloud.rev = d.rev;
+    window.applyRemote(d.state);
+  });
+});
+</script>
+</body>
+</html>
