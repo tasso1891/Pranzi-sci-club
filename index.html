@@ -341,6 +341,10 @@
   </div>
   <div id="srRegistro" style="display:none;">
     <div class="hint" id="rgCount" style="margin-top:14px;"></div>
+    <div class="sr-chips" style="margin:10px 16px 0;">
+      <button class="sr-chip on" id="rgViewB">👤 Per bambino</button>
+      <button class="sr-chip" id="rgViewG">📅 Per giorno</button>
+    </div>
     <div class="searchbox">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input id="rgSearch" placeholder="Cerca un bambino…">
@@ -1143,6 +1147,7 @@ document.getElementById("tabSkiroom").addEventListener("click", ()=>setTab("skir
 
 
 // ---------- SKI ROOM: registro delle preparazioni ----------
+let rgView = "bambini";
 let srMode = "prepara", rgSearch = "", rgOpen = new Set(), rgEdit = null, rgForm = null, rgDelPending = null, rgDelTimer = null;
 function renderSkiroom(){
   document.getElementById("srPrepara").style.display = srMode==="prepara" ? "block" : "none";
@@ -1154,44 +1159,61 @@ function renderSkiroom(){
 function rgChips(group, vals, cur){
   return `<div class="sr-chips">` + vals.map(v=>`<button class="sr-chip ${cur===v[0]?"on":""}" data-eg="${group}" data-v="${v[0]}">${v[1]}</button>`).join("") + `</div>`;
 }
+function rgItemHtml(p, x, titolo){
+  const k = p.id + "|" + x.id;
+  const desc = `${SKI_LABEL[x.t]||""}${x.u?" · "+x.u:""}${x.g?" · "+x.g:""} · €${x.eur}`;
+  let edit = "";
+  if(rgEdit===k && rgForm){
+    edit = `<div class="rg-edit">
+      <div class="rg-lbl" style="margin-top:0">Data</div><input type="date" class="rg-in" id="egD" value="${rgForm.d}">
+      <div class="rg-lbl">Trattamento</div>${rgChips("t", [["completa","Prep. completa"],["sciolina","Solo sciolina"]], rgForm.t)}
+      <div class="rg-lbl">Sci</div>${rgChips("u", [["gara","Da gara"],["allenamento","Allenamento"]], rgForm.u)}
+      <div class="rg-lbl">Disciplina</div>${rgChips("g", [["gigante","Gigante"],["slalom","Slalom"]], rgForm.g)}
+      <div class="rg-lbl">Importo (€)</div><input class="rg-in" id="egE" inputmode="decimal" value="${rgForm.eur}">
+      <div class="rg-actions"><button style="background:var(--blue); color:#fff;" data-egsave="${k}">Salva</button><button style="background:#fff; color:var(--ink-soft); border:1px solid var(--border);" data-egcancel="1">Annulla</button></div>
+    </div>`;
+  }
+  return `<div class="rg-item"><div class="rg-line">
+    <div><div class="name">${titolo}</div><div class="sub">${desc}</div></div>
+    <div style="display:flex; flex-shrink:0;"><button class="rg-btn" data-rgedit="${k}" title="Modifica">✎</button><button class="rg-btn" data-rgdel="${k}" title="Elimina">${rgDelPending===k ? "⚠️" : "🗑"}</button></div>
+  </div>${rgDelPending===k ? '<div class="sub" style="color:#B42318; font-weight:700; margin-top:4px;">Tocca di nuovo il cestino per eliminare</div>' : ""}${edit}</div>`;
+}
 function renderRegistroSki(){
   const q = rgSearch.trim().toUpperCase();
   const righe = [];
   people.forEach(p=>(p.skiLog||[]).forEach(x=>{ if(!q || (p.cognome+" "+p.nome).toUpperCase().includes(q)) righe.push({p, x}); }));
+  const tot = righe.reduce((t,r)=>t+(Number(r.x.eur)||0), 0);
+  const nBamb = new Set(righe.map(r=>r.p.id)).size, nGiorni = new Set(righe.map(r=>r.x.d)).size;
+  document.getElementById("rgCount").textContent = righe.length + (righe.length===1 ? " preparazione" : " preparazioni") + " · " + nBamb + (nBamb===1 ? " bambino" : " bambini") + " · " + nGiorni + (nGiorni===1 ? " giorno" : " giorni") + " · €" + tot;
+  document.getElementById("rgViewB").classList.toggle("on", rgView==="bambini");
+  document.getElementById("rgViewG").classList.toggle("on", rgView==="giorni");
+  const el = document.getElementById("rgList");
+  if(!righe.length){ el.innerHTML = '<div class="empty">' + (q ? "Nessun risultato." : "Nessuna preparazione registrata.") + '</div>'; return; }
+  if(rgView==="bambini"){
+    const per = {};
+    righe.forEach(r=>{ (per[r.p.id] = per[r.p.id] || []).push(r); });
+    const ids = Object.keys(per).sort((a,b)=>{ const A = per[a][0].p, B = per[b][0].p; return A.cognome.localeCompare(B.cognome) || A.nome.localeCompare(B.nome); });
+    el.innerHTML = ids.map(id=>{
+      const L = per[id].sort((a,b)=> a.x.d < b.x.d ? 1 : a.x.d > b.x.d ? -1 : 0);
+      const p = L[0].p, key = "k" + p.id;
+      const tP = L.reduce((t,r)=>t+(Number(r.x.eur)||0), 0);
+      const open = q ? true : rgOpen.has(key);
+      const body = open ? L.map(({p, x})=> rgItemHtml(p, x, fmtFull(x.d))).join("") : "";
+      return `<div class="rg-day"><button class="rg-head" data-rgday="${key}">
+        <div><div class="name">${p.cognome} ${p.nome}</div><div class="sub">${L.length} ${L.length===1?"preparazione":"preparazioni"} · totale €${tP}</div></div>
+        <span>${open?"⌃":"⌄"}</span></button>${body}</div>`;
+    }).join("");
+    return;
+  }
   const giorni = {};
   righe.forEach(r=>{ (giorni[r.x.d] = giorni[r.x.d] || []).push(r); });
   const chiavi = Object.keys(giorni).sort().reverse();
-  const tot = righe.reduce((t,r)=>t+(Number(r.x.eur)||0), 0);
-  document.getElementById("rgCount").textContent = righe.length + (righe.length===1 ? " preparazione" : " preparazioni") + " in " + chiavi.length + (chiavi.length===1 ? " giorno" : " giorni") + " · €" + tot;
-  const el = document.getElementById("rgList");
-  if(!chiavi.length){ el.innerHTML = '<div class="empty">' + (q ? "Nessun risultato." : "Nessuna preparazione registrata.") + '</div>'; return; }
   el.innerHTML = chiavi.map(d=>{
     const L = giorni[d].sort((a,b)=>a.p.cognome.localeCompare(b.p.cognome) || a.p.nome.localeCompare(b.p.nome));
     const nC = L.filter(r=>r.x.t==="completa").length, nS = L.length - nC;
     const tD = L.reduce((t,r)=>t+(Number(r.x.eur)||0), 0);
     const open = q ? true : rgOpen.has(d);
-    let body = "";
-    if(open){
-      body = L.map(({p, x})=>{
-        const k = p.id + "|" + x.id;
-        const desc = `${SKI_LABEL[x.t]||""}${x.u?" · "+x.u:""}${x.g?" · "+x.g:""} · €${x.eur}`;
-        let edit = "";
-        if(rgEdit===k && rgForm){
-          edit = `<div class="rg-edit">
-            <div class="rg-lbl" style="margin-top:0">Data</div><input type="date" class="rg-in" id="egD" value="${rgForm.d}">
-            <div class="rg-lbl">Trattamento</div>${rgChips("t", [["completa","Prep. completa"],["sciolina","Solo sciolina"]], rgForm.t)}
-            <div class="rg-lbl">Sci</div>${rgChips("u", [["gara","Da gara"],["allenamento","Allenamento"]], rgForm.u)}
-            <div class="rg-lbl">Disciplina</div>${rgChips("g", [["gigante","Gigante"],["slalom","Slalom"]], rgForm.g)}
-            <div class="rg-lbl">Importo (€)</div><input class="rg-in" id="egE" inputmode="decimal" value="${rgForm.eur}">
-            <div class="rg-actions"><button style="background:var(--blue); color:#fff;" data-egsave="${k}">Salva</button><button style="background:#fff; color:var(--ink-soft); border:1px solid var(--border);" data-egcancel="1">Annulla</button></div>
-          </div>`;
-        }
-        return `<div class="rg-item"><div class="rg-line">
-          <div><div class="name">${p.cognome} ${p.nome}</div><div class="sub">${desc}</div></div>
-          <div style="display:flex; flex-shrink:0;"><button class="rg-btn" data-rgedit="${k}" title="Modifica">✎</button><button class="rg-btn" data-rgdel="${k}" title="Elimina">${rgDelPending===k ? "⚠️" : "🗑"}</button></div>
-        </div>${rgDelPending===k ? '<div class="sub" style="color:#B42318; font-weight:700; margin-top:4px;">Tocca di nuovo il cestino per eliminare</div>' : ""}${edit}</div>`;
-      }).join("");
-    }
+    const body = open ? L.map(({p, x})=> rgItemHtml(p, x, p.cognome + " " + p.nome)).join("") : "";
     return `<div class="rg-day"><button class="rg-head" data-rgday="${d}">
       <div><div class="name">${fmtFull(d)}</div><div class="sub">${L.length} ${L.length===1?"preparazione":"preparazioni"}${nC?" · "+nC+" complet"+(nC===1?"a":"e"):""}${nS?" · "+nS+" sciolina":""} · €${tD}</div></div>
       <span>${open?"⌃":"⌄"}</span></button>${body}</div>`;
@@ -1252,6 +1274,8 @@ document.getElementById("rgList").addEventListener("click", e=>{
   if(e.target.closest("[data-egcancel]")){ rgEdit = null; rgForm = null; renderRegistroSki(); }
 });
 document.getElementById("rgSearch").addEventListener("input", e=>{ rgSearch = e.target.value; renderRegistroSki(); });
+document.getElementById("rgViewB").addEventListener("click", ()=>{ rgView = "bambini"; renderRegistroSki(); });
+document.getElementById("rgViewG").addEventListener("click", ()=>{ rgView = "giorni"; renderRegistroSki(); });
 document.getElementById("srModeA").addEventListener("click", ()=>{ srMode = "prepara"; renderSkiroom(); });
 document.getElementById("srModeB").addEventListener("click", ()=>{ srMode = "registro"; renderSkiroom(); });
 
