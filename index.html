@@ -42,8 +42,8 @@
   .stat .num{ font-size:19px; font-weight:800; color:#fff; font-variant-numeric: tabular-nums;}
   .stat .lbl{ font-size:10.5px; color:var(--yellow-soft); margin-top:2px;}
 
-  .segmented{ display:flex; gap:6px; margin:14px 16px 0; background:#fff; border-radius:12px; padding:4px; border:1px solid var(--border); }
-  .segmented button{ flex:1; display:flex; align-items:center; justify-content:center; gap:5px; padding:9px 0; border-radius:9px; border:none; background:transparent; color:var(--ink-soft); font-weight:700; font-size:12.5px; }
+  .segmented{ display:flex; flex-wrap:wrap; gap:6px; margin:14px 16px 0; background:#fff; border-radius:12px; padding:4px; border:1px solid var(--border); }
+  .segmented button{ flex:1 0 auto; white-space:nowrap; display:flex; align-items:center; justify-content:center; gap:5px; padding:9px 12px; border-radius:9px; border:none; background:transparent; color:var(--ink-soft); font-weight:700; font-size:12.5px; }
   .segmented button.active{ background:var(--blue); color:#fff; }
 
   .searchbox{ margin:14px 16px 0; position:relative; }
@@ -178,6 +178,19 @@
   .sk-lbl{ display:block; font-size:11.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.3px; margin:12px 0 4px; }
   .sk-in{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:15px; background:#fff; }
   .sk-del{ margin-top:16px; }
+  .sr-actions{ position:sticky; top:env(safe-area-inset-top, 0px); z-index:15; background:var(--bg); padding:12px 16px 8px; }
+  .sr-row1{ display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .sr-row1 input[type=date]{ flex:1; min-width:0; padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#fff; font-size:14px; font-weight:600; color:var(--ink); }
+  .sr-btns{ display:flex; gap:6px; }
+  .sr-btns button{ flex:1; padding:11px 4px; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:700; font-size:12.5px; line-height:1.2; }
+  .sr-btns button:disabled{ opacity:.35; }
+  .sr-tag{ font-weight:700; }
+  .sr-opts{ margin:12px 16px 0; background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px 12px; }
+  .sr-opts .lbl{ font-size:11.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.3px; margin:0 0 6px; }
+  .sr-chips{ display:flex; gap:6px; margin-bottom:10px; }
+  .sr-chips:last-child{ margin-bottom:0; }
+  .sr-chip{ flex:1; padding:9px 4px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--ink-soft); font-weight:700; font-size:13px; }
+  .sr-chip.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
 </style>
 </head>
 <body>
@@ -219,7 +232,8 @@
   <button id="tabRegistra" class="active">✓ Registra</button>
   <button id="tabPersone">👤 Persone</button>
   <button id="tabGiorni">📅 Giorni</button>
-  <button id="tabSci">⛷ Sci</button>
+  <button id="tabSci">📋 Schede</button>
+  <button id="tabSkiroom">🎿 Ski room</button>
 </div>
 
 <!-- REGISTRA -->
@@ -283,6 +297,34 @@
   <div class="list" id="skList"></div>
 </div>
 
+<!-- SKI ROOM -->
+<div id="skiroomView" style="display:none;">
+  <div class="sr-opts">
+    <div class="lbl">Data</div>
+    <div class="sr-chips"><input type="date" id="srDate" style="flex:1; min-width:0; padding:9px 12px; border-radius:10px; border:1px solid var(--border); background:#fff; font-size:14px; font-weight:600; color:var(--ink);"></div>
+    <div class="lbl">Sci</div>
+    <div class="sr-chips" id="srUso"><button class="sr-chip" data-v="gara">Da gara</button><button class="sr-chip" data-v="allenamento">Allenamento</button></div>
+    <div class="lbl">Disciplina</div>
+    <div class="sr-chips" id="srDisc"><button class="sr-chip" data-v="gigante">Gigante</button><button class="sr-chip" data-v="slalom">Slalom</button></div>
+  </div>
+  <div class="sr-actions">
+    <div class="sr-row1">
+      <button class="quick-day-btn" id="srAll">Seleziona tutti</button>
+      <span class="hint" id="srCount" style="margin:0; flex:1; text-align:right; font-size:12px;"></span>
+    </div>
+    <div class="sr-btns">
+      <button data-ski="completa" disabled>Preparazione completa<br>€ 20</button>
+      <button data-ski="sciolina" disabled>Solo sciolina<br>€ 10</button>
+    </div>
+  </div>
+  <div class="searchbox">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input id="srSearch" placeholder="Cerca per nome o cognome…">
+  </div>
+  <div style="margin:10px 16px 0;"><button class="reset-btn" id="srClear" disabled>↩ Annulla l'ultimo trattamento ai selezionati</button></div>
+  <div class="list" id="srList"></div>
+</div>
+
 <div class="footer">
   <button class="reset-btn" id="logoutBtn" style="margin-right:8px;">⎋ Esci</button>
   <button class="reset-btn" id="resetBtn">↺ Ripristina dati originali</button>
@@ -295,6 +337,8 @@
 
 <script>
 const PREZZO_PASTO = 13;
+const SKI_PREZZI = { completa:20, sciolina:10 };
+const SKI_LABEL = { completa:"Preparazione completa", sciolina:"Solo sciolina" };
 const RAW_DATA = {"dates": ["2025-11-29", "2025-11-30", "2025-12-06", "2025-12-07", "2025-12-08", "2025-12-13", "2025-12-14", "2025-12-20", "2025-12-26", "2025-12-27", "2025-12-30", "2026-01-02", "2026-01-04", "2026-01-16", "2026-01-17", "2026-01-18", "2026-01-24", "2026-01-25", "2026-01-30", "2026-01-31", "2026-02-05", "2026-02-08", "2026-02-20", "2026-02-25", "2026-02-27", "2026-03-01", "2026-03-05", "2026-03-08", "2026-02-07", "2026-02-14", "2026-03-07", "2026-03-15", "2026-03-20", "2026-03-27"], "people": [{"num": 1, "cognome": "BARUCCO", "nome": "ANNA", "attendance": [1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 2, "cognome": "BERNARD", "nome": "ALEXANDRE", "attendance": [1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1], "pagato": 260}, {"num": 3, "cognome": "BIANCO", "nome": "ALLEGRA", "attendance": [0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0], "pagato": 130}, {"num": 4, "cognome": "BIANCO", "nome": "LUDOVICO", "attendance": [0, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0], "pagato": 130}, {"num": 5, "cognome": "BIZZIO", "nome": "NICOLO'", "attendance": [0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0], "pagato": 0}, {"num": 6, "cognome": "BIZZIO", "nome": "MATTEO", "attendance": [0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0], "pagato": 0}, {"num": 7, "cognome": "BONINO", "nome": "EDOARDO", "attendance": [1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1], "pagato": 130}, {"num": 9, "cognome": "BRESSA", "nome": "BIAGIO", "attendance": [0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 10, "cognome": "CARAGLIO", "nome": "BEATRICE", "attendance": [1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0], "pagato": 130}, {"num": 11, "cognome": "CARAGLIO", "nome": "ELISABETTA", "attendance": [1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1], "pagato": 260}, {"num": 12, "cognome": "CAROGGIO", "nome": "ALBERTO", "attendance": [1, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0], "pagato": 130}, {"num": 13, "cognome": "CERRINA", "nome": "ANDREA", "attendance": [0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 14, "cognome": "COLOMBO", "nome": "RUGGERO", "attendance": [0, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1], "pagato": 130}, {"num": 15, "cognome": "COPPA", "nome": "EMANUELE", "attendance": [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0], "pagato": 130}, {"num": 16, "cognome": "COPPA", "nome": "MASSIMILIANO", "attendance": [0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0], "pagato": 130}, {"num": 17, "cognome": "DEL BALZO", "nome": "LEONARDO", "attendance": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0], "pagato": 130}, {"num": 18, "cognome": "DESFORGES", "nome": "MATTIA", "attendance": [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 19, "cognome": "DRACONE", "nome": "FILIPPO", "attendance": [0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0], "pagato": 260}, {"num": 20, "cognome": "EMILIANI", "nome": "ELENA", "attendance": [1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0], "pagato": 260}, {"num": 21, "cognome": "FRANZOSI", "nome": "LEONARDO", "attendance": [0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1], "pagato": 260}, {"num": 22, "cognome": "GIORDANO", "nome": "BIANCA", "attendance": [1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0], "pagato": 260}, {"num": 23, "cognome": "GIORDANO", "nome": "SIMONE", "attendance": [1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0], "pagato": 130}, {"num": 24, "cognome": "GIROTTO", "nome": "LORENZO", "attendance": [0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0], "pagato": 260}, {"num": 25, "cognome": "GIUBERGIA", "nome": "HERMANN", "attendance": [1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 26, "cognome": "GRIGOLON", "nome": "NICOLA", "attendance": [1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "pagato": 0}, {"num": 27, "cognome": "HADJITHOMAS", "nome": "CARL", "attendance": [1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0], "pagato": 130}, {"num": 28, "cognome": "HARROCH", "nome": "ARYEL", "attendance": [1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0], "pagato": 130}, {"num": 29, "cognome": "IEZZI", "nome": "MARGHERITA", "attendance": [1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1], "pagato": 260}, {"num": 30, "cognome": "MARQUET", "nome": "VICTOR", "attendance": [0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0], "pagato": 130}, {"num": 31, "cognome": "MERIGGIO", "nome": "FILIPPO", "attendance": [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1], "pagato": 260}, {"num": 32, "cognome": "MOLLO VEGLIO", "nome": "ENEA", "attendance": [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0], "pagato": 130}, {"num": 33, "cognome": "MORELLATO", "nome": "ALLEGRA", "attendance": [0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 34, "cognome": "NECKI", "nome": "GIANMARIA", "attendance": [0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0], "pagato": 130}, {"num": 35, "cognome": "OLIVERI", "nome": "MARTINO", "attendance": [0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 36, "cognome": "PROFETA", "nome": "EVAN", "attendance": [0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 37, "cognome": "SAETTONE", "nome": "CECILIA", "attendance": [1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0], "pagato": 130}, {"num": 38, "cognome": "SCHONEICH", "nome": "GREGORIO", "attendance": [1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0], "pagato": 130}, {"num": 39, "cognome": "SIRNA", "nome": "AVA", "attendance": [0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0], "pagato": 260}, {"num": 40, "cognome": "SORDELLO", "nome": "LUCA", "attendance": [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "pagato": 130}, {"num": 41, "cognome": "SPOSATO", "nome": "AGATA", "attendance": [0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0], "pagato": 130}, {"num": 42, "cognome": "TOSELLO", "nome": "JACOPO", "attendance": [0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1], "pagato": 130}, {"num": 44, "cognome": "VISINO", "nome": "PIETRO", "attendance": [0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0], "pagato": 130}, {"num": 45, "cognome": "VUCUSA", "nome": "BEATRICE", "attendance": [1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "pagato": 130}]};
 
 const dateOrder = RAW_DATA.dates.map((d,i)=>({d,i})).sort((a,b)=>a.d.localeCompare(b.d)).map(x=>x.i);
@@ -355,19 +399,29 @@ let currentSeasonId = DEFAULT_SEASON.id;
 // --- business logic: auto status based on pasti pagati (pagato/13) vs pasti consumati ---
 function pastiConsumati(p){ return Object.keys(p.attendance).filter(d=>p.attendance[d]===1).length; }
 function pastiPagati(p){ return Math.floor((p.pagato||0)/PREZZO_PASTO); }
+function skiTot(p){ return (p.skiLog||[]).reduce((t,x)=>t+(Number(x.eur)||0),0); }
+function skiText(x){ return [SKI_LABEL[x.t], x.u, x.g].filter(Boolean).join(" · ") + " · " + x.eur + "€ · " + fmtFull(x.d); }
+function skiHtmlFor(p){
+  const L = p.skiLog||[];
+  if(!L.length) return "";
+  return '<div style="margin-top:12px; font-size:12px; font-weight:700; color:var(--ink-soft);">SKI ROOM · €' + skiTot(p) + '</div>'
+    + L.map(x=>`<div class="present-day-row"><span class="lbl">${skiText(x)}</span><button class="rm" data-skirm="${p.id}|${x.id}" title="Rimuovi (correggi errore)">✕</button></div>`).join("");
+}
 function personStatus(p){
   const consumati = pastiConsumati(p);
-  const pagati = pastiPagati(p);
-  const remaining = pagati - consumati;
-  if(consumati > pagati){
-    const dovuti = consumati - pagati;
-    return { code:"PAGARE", label:"Deve pagare", detail:`Deve pagare ${dovuti*PREZZO_PASTO}€ (${dovuti} past${dovuti===1?"o":"i"} extra)` };
+  const ski = skiTot(p);
+  const saldo = (p.pagato||0) - consumati*PREZZO_PASTO - ski;
+  const remaining = Math.floor(saldo/PREZZO_PASTO);
+  if(saldo < 0){
+    const due = -saldo;
+    const dovuti = Math.ceil(due/PREZZO_PASTO);
+    return { code:"PAGARE", label:"Deve pagare", detail: ski>0 ? `Deve pagare ${due}€ (di cui ${ski}€ ski room)` : `Deve pagare ${due}€ (${dovuti} past${dovuti===1?"o":"i"} extra)` };
   }
-  if(pagati>0 && remaining<=1){
-    return { code:"RICARICARE", label:"Da ricaricare", detail: remaining===0 ? "Ultimo pasto disponibile: ricaricare" : "Manca 1 pasto: ricaricare presto" };
+  if(pastiPagati(p)>0 && remaining<=1){
+    return { code:"RICARICARE", label:"Da ricaricare", detail: remaining<=0 ? "Ultimo pasto disponibile: ricaricare" : "Manca 1 pasto: ricaricare presto" };
   }
-  if(pagati>0 && remaining>0){
-    return { code:"OK", label:"OK", detail:`${remaining} past${remaining===1?"o":"i"} rimanent${remaining===1?"e":"i"} · da restituire ${remaining*PREZZO_PASTO}€` };
+  if(pastiPagati(p)>0 && remaining>0){
+    return { code:"OK", label:"OK", detail:`${remaining} past${remaining===1?"o":"i"} rimanent${remaining===1?"e":"i"} · da restituire ${saldo}€${ski>0?` (ski room già scalato: ${ski}€)`:""}` };
   }
   return { code:"OK", label:"OK", detail: "Nessuna ricarica registrata" };
 }
@@ -733,7 +787,7 @@ function renderPeopleList(){
           <div class="avatar">${initials(p.cognome,p.nome)}</div>
           <div class="name-block">
             <div class="name">${p.cognome} ${p.nome}</div>
-            <div class="sub">${consumati} pasti · €${p.pagato}</div>
+            <div class="sub">${consumati} pasti · €${p.pagato}${skiTot(p)?` · ski €${skiTot(p)}`:""}</div>
           </div>
           <div class="badge ${st.code}">${st.label}</div>
           <svg class="chevron ${isOpen?"open":""}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
@@ -747,6 +801,7 @@ function renderPeopleList(){
           </div>
           <button class="delete-btn ${deletePendingId===p.id?"confirm":""}" data-delete="${p.id}">${deletePendingId===p.id ? "⚠️ Tocca di nuovo per confermare" : "🗑 Cancella persona"}</button>
           ${presentDaysHtml}
+          ${skiHtmlFor(p)}
         </div>
       </div>
     `;
@@ -756,6 +811,13 @@ function renderPeopleList(){
     const id = Number(b.dataset.toggle);
     expandedId = expandedId===id ? null : id;
     render();
+  }));
+  container.querySelectorAll("[data-skirm]").forEach(b=>b.addEventListener("click", ()=>{
+    const [pid, eid] = b.dataset.skirm.split("|");
+    const p = people.find(x=>x.id===Number(pid));
+    if(!p) return;
+    p.skiLog = (p.skiLog||[]).filter(x=>x.id!==eid);
+    saveData(); render();
   }));
   container.querySelectorAll("[data-pagato]").forEach(inp=>inp.addEventListener("change", ()=>{
     updatePagato(Number(inp.dataset.pagato), inp.value);
@@ -892,16 +954,17 @@ function renderSeasonChips(){
 function render(){
   renderSeasonChips();
   computeSummary();
-  ["registra","persone","giorni","attrezzatura"].forEach(v=>{ document.getElementById(v+"View").style.display = currentView===v ? "block" : "none"; });
+  ["registra","persone","giorni","attrezzatura","skiroom"].forEach(v=>{ document.getElementById(v+"View").style.display = currentView===v ? "block" : "none"; });
   if(currentView==="registra") renderRegisterList();
   else if(currentView==="persone"){ renderChips(); renderPeopleList(); }
   else if(currentView==="giorni") renderDaysList();
-  else renderSchede();
+  else if(currentView==="attrezzatura") renderSchede();
+  else renderSkiroom();
 }
 
 function setTab(tab){
   currentView = tab;
-  [["tabRegistra","registra"],["tabPersone","persone"],["tabGiorni","giorni"],["tabSci","attrezzatura"]].forEach(([id,v])=> document.getElementById(id).classList.toggle("active", tab===v));
+  [["tabRegistra","registra"],["tabPersone","persone"],["tabGiorni","giorni"],["tabSci","attrezzatura"],["tabSkiroom","skiroom"]].forEach(([id,v])=> document.getElementById(id).classList.toggle("active", tab===v));
   render();
 }
 document.getElementById("tabRegistra").addEventListener("click", ()=>setTab("registra"));
@@ -982,6 +1045,77 @@ document.getElementById("skAddSave").addEventListener("click", ()=>{
   skOpen = id; saveData(); renderSchede();
 });
 document.getElementById("tabSci").addEventListener("click", ()=>setTab("attrezzatura"));
+
+// ---------- SKI ROOM ----------
+let srSel = new Set(), srSearch = "", srUso = "", srDisc = "";
+function srVisibili(){
+  const q = srSearch.trim().toUpperCase();
+  return people.filter(p=>!q || p.cognome.toUpperCase().includes(q) || p.nome.toUpperCase().includes(q))
+    .sort((a,b)=>a.cognome.localeCompare(b.cognome) || a.nome.localeCompare(b.nome));
+}
+function renderSkiroom(){
+  const list = srVisibili();
+  const nSel = people.filter(p=>srSel.has(p.id)).length;
+  const tutti = list.length>0 && list.every(p=>srSel.has(p.id));
+  document.getElementById("srAll").textContent = tutti ? "Deseleziona tutti" : "Seleziona tutti";
+  const opz = [srUso==="gara" ? "gara" : srUso==="allenamento" ? "allenamento" : "", srDisc].filter(Boolean).join(" · ");
+  document.getElementById("srCount").textContent = nSel + (nSel===1 ? " selezionato" : " selezionati") + (opz ? " · " + opz : "");
+  document.querySelectorAll("[data-ski]").forEach(b=>{ b.disabled = nSel===0; });
+  document.getElementById("srClear").disabled = nSel===0;
+  document.querySelectorAll("#srUso .sr-chip").forEach(c=>c.classList.toggle("on", c.dataset.v===srUso));
+  document.querySelectorAll("#srDisc .sr-chip").forEach(c=>c.classList.toggle("on", c.dataset.v===srDisc));
+  const el = document.getElementById("srList");
+  if(!list.length){ el.innerHTML = '<div class="empty">Nessuno trovato.</div>'; return; }
+  el.innerHTML = list.map(p=>{
+    const on = srSel.has(p.id);
+    const L = p.skiLog||[];
+    let sub = "nessun trattamento";
+    if(L.length){
+      const x = L[L.length-1];
+      sub = `<span class="sr-tag">${SKI_LABEL[x.t]||""}</span>${x.u?" · "+x.u:""}${x.g?" · "+x.g:""} · ${fmtFull(x.d)}` + (L.length>1 ? ` · ${L.length} volte, €${skiTot(p)}` : ` · €${skiTot(p)}`);
+    }
+    return `<button class="reg-row ${on?"present":""}" data-sr="${p.id}">
+      <div class="avatar">${initials(p.cognome,p.nome)}</div>
+      <div class="name-block"><div class="name">${p.cognome} ${p.nome}</div><div class="sub">${sub}</div></div>
+      <div class="check-circle">${on?checkIcon():""}</div>
+    </button>`;
+  }).join("");
+}
+function srApply(t){
+  const sel = people.filter(p=>srSel.has(p.id));
+  if(!sel.length) return;
+  const d = document.getElementById("srDate").value || todayISO(0);
+  sel.forEach(p=>{
+    if(!p.skiLog) p.skiLog = [];
+    p.skiLog.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), t, u: srUso, g: srDisc, d, eur: SKI_PREZZI[t] });
+  });
+  srSel.clear(); saveData(); render();
+}
+function srUndo(){
+  const sel = people.filter(p=>srSel.has(p.id) && (p.skiLog||[]).length);
+  if(!sel.length) return;
+  sel.forEach(p=>{ p.skiLog.pop(); });
+  srSel.clear(); saveData(); render();
+}
+document.getElementById("srDate").value = todayISO(0);
+document.getElementById("srList").addEventListener("click", e=>{
+  const b = e.target.closest("[data-sr]"); if(!b) return;
+  const id = Number(b.dataset.sr);
+  if(srSel.has(id)) srSel.delete(id); else srSel.add(id);
+  renderSkiroom();
+});
+document.getElementById("srAll").addEventListener("click", ()=>{
+  const list = srVisibili();
+  const tutti = list.length>0 && list.every(p=>srSel.has(p.id));
+  list.forEach(p=>{ if(tutti) srSel.delete(p.id); else srSel.add(p.id); });
+  renderSkiroom();
+});
+document.getElementById("srSearch").addEventListener("input", e=>{ srSearch = e.target.value; renderSkiroom(); });
+document.getElementById("srUso").addEventListener("click", e=>{ const c = e.target.closest(".sr-chip"); if(c){ srUso = srUso===c.dataset.v ? "" : c.dataset.v; renderSkiroom(); } });
+document.getElementById("srDisc").addEventListener("click", e=>{ const c = e.target.closest(".sr-chip"); if(c){ srDisc = srDisc===c.dataset.v ? "" : c.dataset.v; renderSkiroom(); } });
+document.querySelectorAll("[data-ski]").forEach(b=>b.addEventListener("click", ()=>srApply(b.dataset.ski)));
+document.getElementById("srClear").addEventListener("click", srUndo);
+document.getElementById("tabSkiroom").addEventListener("click", ()=>setTab("skiroom"));
 
 document.getElementById("registerDate").addEventListener("change", (e)=>{
   registerDate = e.target.value || todayISO(0);
@@ -1083,6 +1217,12 @@ function mergeState(b, l, r){
         if(bv!==lv){ if(lv) rp.attendance[d] = 1; else delete rp.attendance[d]; }
       });
       rp.pagato = Math.max(0, (rp.pagato||0) + ((lp.pagato||0) - (bp.pagato||0)));
+      { const bl = bp.skiLog||[], ll = lp.skiLog||[];
+        if(ll.length || bl.length){
+          rp.skiLog = rp.skiLog||[];
+          ll.forEach(x=>{ if(!bl.some(y=>y.id===x.id) && !rp.skiLog.some(y=>y.id===x.id)) rp.skiLog.push(x); });
+          bl.forEach(x=>{ if(!ll.some(y=>y.id===x.id)) rp.skiLog = rp.skiLog.filter(y=>y.id!==x.id); });
+        } }
     });
     B.forEach(bp=>{ if(!lm.has(bp.id)){ const i = R.findIndex(p=>p.id===bp.id); if(i>=0) R.splice(i,1); } });
   });
