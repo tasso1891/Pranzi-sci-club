@@ -170,6 +170,14 @@
   .lbox .eyebrow{ color:var(--yellow-dark); }
   .lbox input{ width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border); font-size:15px; margin-bottom:8px; }
   .lbox button{ width:100%; padding:12px 0; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:800; font-size:14px; }
+  .sk-card{ background:var(--card); border-radius:14px; margin:0 0 8px; overflow:hidden; }
+  .sk-head{ width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; background:none; border:none; text-align:left; cursor:pointer; font:inherit; color:inherit; }
+  .sk-name{ font-weight:800; font-size:15px; color:var(--ink); }
+  .sk-sub{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .sk-body{ padding:0 14px 14px; border-top:1px solid var(--border); }
+  .sk-lbl{ display:block; font-size:11.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.3px; margin:12px 0 4px; }
+  .sk-in{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:15px; background:#fff; }
+  .sk-del{ margin-top:16px; }
 </style>
 </head>
 <body>
@@ -211,6 +219,7 @@
   <button id="tabRegistra" class="active">✓ Registra</button>
   <button id="tabPersone">👤 Persone</button>
   <button id="tabGiorni">📅 Giorni</button>
+  <button id="tabSci">⛷ Sci</button>
 </div>
 
 <!-- REGISTRA -->
@@ -254,6 +263,24 @@
 <div id="giorniView" style="display:none;">
   <div class="hint" style="margin-top:14px;">Numero di iscritti a pranzo per ciascuna data — utile per la prenotazione in mensa.</div>
   <div class="list" id="daysList"></div>
+</div>
+
+<!-- ATTREZZATURA -->
+<div id="attrezzaturaView" style="display:none;">
+  <div class="hint" style="margin-top:14px;" id="skCount"></div>
+  <div class="searchbox">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input id="skSearch" placeholder="Cerca per nome…">
+  </div>
+  <div class="add-bar">
+    <button class="add-toggle" id="skAddToggle">+ Nuova scheda</button>
+    <div class="add-form" id="skAddForm">
+      <input id="skAddNome" placeholder="Cognome e nome">
+      <div class="form-error" id="skAddError">Inserisci il nome.</div>
+      <button class="save" id="skAddSave">Crea scheda</button>
+    </div>
+  </div>
+  <div class="list" id="skList"></div>
 </div>
 
 <div class="footer">
@@ -865,35 +892,96 @@ function renderSeasonChips(){
 function render(){
   renderSeasonChips();
   computeSummary();
-  if(currentView==="registra"){
-    document.getElementById("registraView").style.display = "block";
-    document.getElementById("personeView").style.display = "none";
-    document.getElementById("giorniView").style.display = "none";
-    renderRegisterList();
-  } else if(currentView==="persone"){
-    document.getElementById("registraView").style.display = "none";
-    document.getElementById("personeView").style.display = "block";
-    document.getElementById("giorniView").style.display = "none";
-    renderChips();
-    renderPeopleList();
-  } else {
-    document.getElementById("registraView").style.display = "none";
-    document.getElementById("personeView").style.display = "none";
-    document.getElementById("giorniView").style.display = "block";
-    renderDaysList();
-  }
+  ["registra","persone","giorni","attrezzatura"].forEach(v=>{ document.getElementById(v+"View").style.display = currentView===v ? "block" : "none"; });
+  if(currentView==="registra") renderRegisterList();
+  else if(currentView==="persone"){ renderChips(); renderPeopleList(); }
+  else if(currentView==="giorni") renderDaysList();
+  else renderSchede();
 }
 
 function setTab(tab){
   currentView = tab;
-  document.getElementById("tabRegistra").classList.toggle("active", tab==="registra");
-  document.getElementById("tabPersone").classList.toggle("active", tab==="persone");
-  document.getElementById("tabGiorni").classList.toggle("active", tab==="giorni");
+  [["tabRegistra","registra"],["tabPersone","persone"],["tabGiorni","giorni"],["tabSci","attrezzatura"]].forEach(([id,v])=> document.getElementById(id).classList.toggle("active", tab===v));
   render();
 }
 document.getElementById("tabRegistra").addEventListener("click", ()=>setTab("registra"));
 document.getElementById("tabPersone").addEventListener("click", ()=>setTab("persone"));
 document.getElementById("tabGiorni").addEventListener("click", ()=>setTab("giorni"));
+
+// ---------- ATTREZZATURA (schede personali) ----------
+let skSearch = "", skOpen = null, skDelPending = null, skDelTimer = null;
+function schede(){ if(!appState.schede) appState.schede = []; return appState.schede; }
+function skEsc(x){ return String(x==null?"":x).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+const SK_FIELDS = [
+  ["scarpMisura","Scarponi · misura (mm)","decimal"],
+  ["scarpModello","Scarponi · modello","text"],
+  ["scarpDurezza","Scarponi · durezza (flex)","decimal"],
+  ["sciModello","Sci · modello","text"],
+  ["sciAltezza","Sci · altezza (cm)","decimal"]
+];
+function skSummary(x){
+  const a = [];
+  if(x.scarpMisura) a.push(x.scarpMisura+" mm");
+  if(x.scarpDurezza) a.push("flex "+x.scarpDurezza);
+  if(x.sciAltezza) a.push("sci "+x.sciAltezza+" cm");
+  return a.length ? a.join(" · ") : "da compilare";
+}
+function renderSchede(){
+  const q = skSearch.trim().toUpperCase();
+  const list = schede().filter(x=>!q || x.nome.toUpperCase().includes(q)).sort((a,b)=>a.nome.localeCompare(b.nome));
+  document.getElementById("skCount").textContent = schede().length + (schede().length===1 ? " scheda" : " schede");
+  const el = document.getElementById("skList");
+  if(!list.length){
+    el.innerHTML = '<div class="empty">' + (schede().length ? "Nessuna scheda trovata." : "Nessuna scheda: tocca “+ Nuova scheda”.") + '</div>';
+    return;
+  }
+  el.innerHTML = list.map(x=>{
+    const open = skOpen===x.id;
+    let body = "";
+    if(open){
+      body = '<div class="sk-body">' + SK_FIELDS.map(f=>`<label class="sk-lbl">${f[1]}</label><input class="sk-in" data-id="${x.id}" data-f="${f[0]}" inputmode="${f[2]}" value="${skEsc(x[f[0]])}">`).join("")
+        + `<button class="reset-btn sk-del" data-del="${x.id}">${skDelPending===x.id ? "Tocca di nuovo per eliminare" : "🗑 Elimina scheda"}</button></div>`;
+    }
+    return `<div class="sk-card"><button class="sk-head" data-open="${x.id}"><div><div class="sk-name">${skEsc(x.nome)}</div><div class="sk-sub">${skEsc(skSummary(x))}</div></div><span>${open?"⌃":"⌄"}</span></button>${body}</div>`;
+  }).join("");
+}
+document.getElementById("skList").addEventListener("click", e=>{
+  const del = e.target.closest("[data-del]");
+  if(del){
+    const id = del.dataset.del;
+    if(skDelPending===id){
+      clearTimeout(skDelTimer); skDelPending = null; skOpen = null;
+      appState.schede = schede().filter(x=>x.id!==id);
+      saveData(); renderSchede();
+    } else {
+      skDelPending = id; renderSchede();
+      clearTimeout(skDelTimer); skDelTimer = setTimeout(()=>{ skDelPending = null; renderSchede(); }, 3500);
+    }
+    return;
+  }
+  const op = e.target.closest("[data-open]");
+  if(op){ skOpen = skOpen===op.dataset.open ? null : op.dataset.open; skDelPending = null; renderSchede(); }
+});
+document.getElementById("skList").addEventListener("input", e=>{
+  const t = e.target;
+  if(!t.classList.contains("sk-in")) return;
+  const x = schede().find(y=>y.id===t.dataset.id);
+  if(x){ x[t.dataset.f] = t.value.trim(); saveData(); }
+});
+document.getElementById("skSearch").addEventListener("input", e=>{ skSearch = e.target.value; renderSchede(); });
+document.getElementById("skAddToggle").addEventListener("click", ()=> document.getElementById("skAddForm").classList.toggle("open"));
+document.getElementById("skAddSave").addEventListener("click", ()=>{
+  const inp = document.getElementById("skAddNome"), err = document.getElementById("skAddError");
+  const nome = inp.value.trim().toUpperCase();
+  if(!nome){ err.classList.add("show"); return; }
+  err.classList.remove("show");
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  schede().push({ id, nome, scarpMisura:"", scarpModello:"", scarpDurezza:"", sciModello:"", sciAltezza:"" });
+  inp.value = ""; document.getElementById("skAddForm").classList.remove("open");
+  skSearch = ""; document.getElementById("skSearch").value = "";
+  skOpen = id; saveData(); renderSchede();
+});
+document.getElementById("tabSci").addEventListener("click", ()=>setTab("attrezzatura"));
 
 document.getElementById("registerDate").addEventListener("change", (e)=>{
   registerDate = e.target.value || todayISO(0);
@@ -998,6 +1086,14 @@ function mergeState(b, l, r){
     });
     B.forEach(bp=>{ if(!lm.has(bp.id)){ const i = R.findIndex(p=>p.id===bp.id); if(i>=0) R.splice(i,1); } });
   });
+  const bS = b.schede || [], lS = l.schede || [];
+  out.schede = out.schede || [];
+  lS.forEach(x=>{
+    const bx = bS.find(y=>y.id===x.id), rx = out.schede.find(y=>y.id===x.id);
+    if(!bx){ if(!rx) out.schede.push(x); }
+    else if(rx){ Object.keys(x).forEach(f=>{ if(JSON.stringify(x[f])!==JSON.stringify(bx[f])) rx[f] = x[f]; }); }
+  });
+  bS.forEach(x=>{ if(!lS.some(y=>y.id===x.id)) out.schede = out.schede.filter(y=>y.id!==x.id); });
   return JSON.stringify(out);
 }
 
