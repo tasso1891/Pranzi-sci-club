@@ -954,16 +954,17 @@ window.applyRemote = function(str){
 window.startApp = loadData;
 </script>
 <script type="module">
-import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {initializeFirestore,persistentLocalCache,doc,getDoc,onSnapshot,runTransaction,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {initializeApp} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+import {initializeFirestore,persistentLocalCache,doc,getDoc,onSnapshot,runTransaction,serverTimestamp} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
 
-// >>> INCOLLA QUI il blocco firebaseConfig che usi già nel gestionale <<<
 const FIREBASE_CONFIG = {
-  apiKey: "INCOLLA_API_KEY",
+  apiKey: "AIzaSyCt9D9Uomu3rNhDq1qDICuWnUdZJjmLlow",
   authDomain: "gestionale-422df.firebaseapp.com",
   projectId: "gestionale-422df",
-  appId: "INCOLLA_APP_ID"
+  storageBucket: "gestionale-422df.firebasestorage.app",
+  messagingSenderId: "821831582537",
+  appId: "1:821831582537:web:51bc9804bc708c24369098"
 };
 
 if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
