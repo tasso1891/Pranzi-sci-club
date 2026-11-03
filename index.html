@@ -317,9 +317,9 @@
   <div class="sr-opts">
     <div class="lbl">Data</div>
     <div class="sr-chips"><input type="date" id="srDate" style="flex:1; min-width:0; padding:9px 12px; border-radius:10px; border:1px solid var(--border); background:#fff; font-size:14px; font-weight:600; color:var(--ink);"></div>
-    <div class="lbl">Sci</div>
+    <div class="lbl">Sci (anche entrambi)</div>
     <div class="sr-chips" id="srUso"><button class="sr-chip" data-v="gara">Da gara</button><button class="sr-chip" data-v="allenamento">Allenamento</button></div>
-    <div class="lbl">Disciplina</div>
+    <div class="lbl">Disciplina (anche entrambe)</div>
     <div class="sr-chips" id="srDisc"><button class="sr-chip" data-v="gigante">Gigante</button><button class="sr-chip" data-v="slalom">Slalom</button></div>
   </div>
   <div class="sr-actions">
@@ -1075,23 +1075,36 @@ document.getElementById("skAddSave").addEventListener("click", ()=>{
 document.getElementById("tabSci").addEventListener("click", ()=>setTab("attrezzatura"));
 
 // ---------- SKI ROOM ----------
-let srSel = new Set(), srSearch = "", srUso = "", srDisc = "";
+let srSel = new Set(), srSearch = "", srUso = new Set(), srDisc = new Set();
 function srVisibili(){
   const q = srSearch.trim().toUpperCase();
   return people.filter(p=>!q || p.cognome.toUpperCase().includes(q) || p.nome.toUpperCase().includes(q))
     .sort((a,b)=>a.cognome.localeCompare(b.cognome) || a.nome.localeCompare(b.nome));
 }
+// ogni combinazione sci da gara/allenamento x gigante/slalom è un paio di sci (e un addebito)
+function srUsi(){ return ["gara","allenamento"].filter(v=>srUso.has(v)); }
+function srDiscs(){ return ["gigante","slalom"].filter(v=>srDisc.has(v)); }
+function srCombo(){
+  const U = srUsi(), D = srDiscs(), out = [];
+  (U.length ? U : [""]).forEach(u=>(D.length ? D : [""]).forEach(g=>out.push({ u, g })));
+  return out;
+}
 function renderPrepara(){
   const list = srVisibili();
   const nSel = people.filter(p=>srSel.has(p.id)).length;
   const tutti = list.length>0 && list.every(p=>srSel.has(p.id));
+  const n = srCombo().length;
   document.getElementById("srAll").textContent = tutti ? "Deseleziona tutti" : "Seleziona tutti";
-  const opz = [srUso==="gara" ? "gara" : srUso==="allenamento" ? "allenamento" : "", srDisc].filter(Boolean).join(" · ");
-  document.getElementById("srCount").textContent = nSel + (nSel===1 ? " selezionato" : " selezionati") + (opz ? " · " + opz : "");
-  document.querySelectorAll("[data-ski]").forEach(b=>{ b.disabled = nSel===0; });
+  const opz = [srUsi().join("+"), srDiscs().join("+")].filter(Boolean).join(" · ");
+  document.getElementById("srCount").textContent = nSel + (nSel===1 ? " selezionato" : " selezionati") + (opz ? " · " + opz : "") + (n>1 ? " · " + n + " paia" : "");
+  document.querySelectorAll("[data-ski]").forEach(b=>{
+    const t = b.dataset.ski, pr = SKI_PREZZI[t];
+    b.disabled = nSel===0;
+    b.innerHTML = SKI_LABEL[t] + "<br>€ " + pr + (n>1 ? " × " + n + " = € " + (pr*n) : "");
+  });
   document.getElementById("srClear").disabled = nSel===0;
-  document.querySelectorAll("#srUso .sr-chip").forEach(c=>c.classList.toggle("on", c.dataset.v===srUso));
-  document.querySelectorAll("#srDisc .sr-chip").forEach(c=>c.classList.toggle("on", c.dataset.v===srDisc));
+  document.querySelectorAll("#srUso .sr-chip").forEach(c=>c.classList.toggle("on", srUso.has(c.dataset.v)));
+  document.querySelectorAll("#srDisc .sr-chip").forEach(c=>c.classList.toggle("on", srDisc.has(c.dataset.v)));
   const el = document.getElementById("srList");
   if(!list.length){ el.innerHTML = '<div class="empty">Nessuno trovato.</div>'; return; }
   el.innerHTML = list.map(p=>{
@@ -1100,7 +1113,10 @@ function renderPrepara(){
     let sub = "nessun trattamento";
     if(L.length){
       const x = L[L.length-1];
-      sub = `<span class="sr-tag">${SKI_LABEL[x.t]||""}</span>${x.u?" · "+x.u:""}${x.g?" · "+x.g:""} · ${fmtFull(x.d)}` + (L.length>1 ? ` · ${L.length} volte, €${skiTot(p)}` : ` · €${skiTot(p)}`);
+      const G = x.a ? L.filter(y=>y.a===x.a) : [x];
+      const us = [...new Set(G.map(y=>y.u).filter(Boolean))].join("+"), gs = [...new Set(G.map(y=>y.g).filter(Boolean))].join("+");
+      const gTot = G.reduce((t,y)=>t+(Number(y.eur)||0), 0);
+      sub = `<span class="sr-tag">${SKI_LABEL[x.t]||""}</span>${us?" · "+us:""}${gs?" · "+gs:""} · ${fmtFull(x.d)} · ${G.length} ${G.length===1?"paio":"paia"} · €${gTot}` + (L.length>G.length ? ` · totale €${skiTot(p)}` : "");
     }
     return `<button class="reg-row ${on?"present":""}" data-sr="${p.id}">
       <div class="avatar">${initials(p.cognome,p.nome)}</div>
@@ -1113,16 +1129,21 @@ function srApply(t){
   const sel = people.filter(p=>srSel.has(p.id));
   if(!sel.length) return;
   const d = document.getElementById("srDate").value || todayISO(0);
+  const nid = ()=> Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  const combos = srCombo(), a = nid();
   sel.forEach(p=>{
     if(!p.skiLog) p.skiLog = [];
-    p.skiLog.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), t, u: srUso, g: srDisc, d, eur: SKI_PREZZI[t] });
+    combos.forEach(c=> p.skiLog.push({ id: nid(), a, t, u: c.u, g: c.g, d, eur: SKI_PREZZI[t] }));
   });
   srSel.clear(); saveData(); render();
 }
 function srUndo(){
   const sel = people.filter(p=>srSel.has(p.id) && (p.skiLog||[]).length);
   if(!sel.length) return;
-  sel.forEach(p=>{ p.skiLog.pop(); });
+  sel.forEach(p=>{
+    const x = p.skiLog[p.skiLog.length-1];
+    p.skiLog = x.a ? p.skiLog.filter(y=>y.a!==x.a) : p.skiLog.slice(0,-1);
+  });
   srSel.clear(); saveData(); render();
 }
 document.getElementById("srDate").value = todayISO(0);
@@ -1139,12 +1160,11 @@ document.getElementById("srAll").addEventListener("click", ()=>{
   renderSkiroom();
 });
 document.getElementById("srSearch").addEventListener("input", e=>{ srSearch = e.target.value; renderSkiroom(); });
-document.getElementById("srUso").addEventListener("click", e=>{ const c = e.target.closest(".sr-chip"); if(c){ srUso = srUso===c.dataset.v ? "" : c.dataset.v; renderSkiroom(); } });
-document.getElementById("srDisc").addEventListener("click", e=>{ const c = e.target.closest(".sr-chip"); if(c){ srDisc = srDisc===c.dataset.v ? "" : c.dataset.v; renderSkiroom(); } });
+document.getElementById("srUso").addEventListener("click", e=>{ const c = e.target.closest(".sr-chip"); if(c){ if(srUso.has(c.dataset.v)) srUso.delete(c.dataset.v); else srUso.add(c.dataset.v); renderSkiroom(); } });
+document.getElementById("srDisc").addEventListener("click", e=>{ const c = e.target.closest(".sr-chip"); if(c){ if(srDisc.has(c.dataset.v)) srDisc.delete(c.dataset.v); else srDisc.add(c.dataset.v); renderSkiroom(); } });
 document.querySelectorAll("[data-ski]").forEach(b=>b.addEventListener("click", ()=>srApply(b.dataset.ski)));
 document.getElementById("srClear").addEventListener("click", srUndo);
 document.getElementById("tabSkiroom").addEventListener("click", ()=>setTab("skiroom"));
-
 
 // ---------- SKI ROOM: registro delle preparazioni ----------
 let rgView = "bambini";
@@ -1184,11 +1204,11 @@ function renderRegistroSki(){
   people.forEach(p=>(p.skiLog||[]).forEach(x=>{ if(!q || (p.cognome+" "+p.nome).toUpperCase().includes(q)) righe.push({p, x}); }));
   const tot = righe.reduce((t,r)=>t+(Number(r.x.eur)||0), 0);
   const nBamb = new Set(righe.map(r=>r.p.id)).size, nGiorni = new Set(righe.map(r=>r.x.d)).size;
-  document.getElementById("rgCount").textContent = righe.length + (righe.length===1 ? " preparazione" : " preparazioni") + " · " + nBamb + (nBamb===1 ? " bambino" : " bambini") + " · " + nGiorni + (nGiorni===1 ? " giorno" : " giorni") + " · €" + tot;
+  document.getElementById("rgCount").textContent = righe.length + (righe.length===1 ? " paio" : " paia") + " · " + nBamb + (nBamb===1 ? " bambino" : " bambini") + " · " + nGiorni + (nGiorni===1 ? " giorno" : " giorni") + " · €" + tot;
   document.getElementById("rgViewB").classList.toggle("on", rgView==="bambini");
   document.getElementById("rgViewG").classList.toggle("on", rgView==="giorni");
   const el = document.getElementById("rgList");
-  if(!righe.length){ el.innerHTML = '<div class="empty">' + (q ? "Nessun risultato." : "Nessuna preparazione registrata.") + '</div>'; return; }
+  if(!righe.length){ el.innerHTML = '<div class="empty">' + (q ? "Nessun risultato." : "Nessun paio di sci registrato.") + '</div>'; return; }
   if(rgView==="bambini"){
     const per = {};
     righe.forEach(r=>{ (per[r.p.id] = per[r.p.id] || []).push(r); });
@@ -1200,7 +1220,7 @@ function renderRegistroSki(){
       const open = q ? true : rgOpen.has(key);
       const body = open ? L.map(({p, x})=> rgItemHtml(p, x, fmtFull(x.d))).join("") : "";
       return `<div class="rg-day"><button class="rg-head" data-rgday="${key}">
-        <div><div class="name">${p.cognome} ${p.nome}</div><div class="sub">${L.length} ${L.length===1?"preparazione":"preparazioni"} · totale €${tP}</div></div>
+        <div><div class="name">${p.cognome} ${p.nome}</div><div class="sub">${L.length} ${L.length===1?"paio":"paia"} · totale €${tP}</div></div>
         <span>${open?"⌃":"⌄"}</span></button>${body}</div>`;
     }).join("");
     return;
@@ -1215,7 +1235,7 @@ function renderRegistroSki(){
     const open = q ? true : rgOpen.has(d);
     const body = open ? L.map(({p, x})=> rgItemHtml(p, x, p.cognome + " " + p.nome)).join("") : "";
     return `<div class="rg-day"><button class="rg-head" data-rgday="${d}">
-      <div><div class="name">${fmtFull(d)}</div><div class="sub">${L.length} ${L.length===1?"preparazione":"preparazioni"}${nC?" · "+nC+" complet"+(nC===1?"a":"e"):""}${nS?" · "+nS+" sciolina":""} · €${tD}</div></div>
+      <div><div class="name">${fmtFull(d)}</div><div class="sub">${L.length} ${L.length===1?"paio":"paia"}${nC?" · "+nC+" complet"+(nC===1?"a":"e"):""}${nS?" · "+nS+" sciolina":""} · €${tD}</div></div>
       <span>${open?"⌃":"⌄"}</span></button>${body}</div>`;
   }).join("");
 }
