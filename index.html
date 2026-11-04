@@ -100,7 +100,7 @@
 
   .footer{ margin:22px 16px 0; display:flex; align-items:center; justify-content:space-between; }
   .footer{ justify-content:flex-end; }
-  .savebar{ position:fixed; left:0; right:0; bottom:0; z-index:20; background:#fff; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .savebar{ position:fixed; left:0; right:0; bottom:0; z-index:1000; background:#fff; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
   .savebar .save-state{ font-size:12.5px; font-weight:600; color:var(--ink-soft); }
   .savebar .save-state.dirty{ color:var(--yellow-dark); }
   .save-main{ display:flex; align-items:center; gap:6px; padding:11px 22px; border-radius:12px; border:none; background:var(--green); color:#fff; font-weight:800; font-size:14px; cursor:pointer; }
@@ -596,7 +596,10 @@ async function saveNow(){
   const btn = document.getElementById("saveBtn");
   btn.disabled = true;
   st.textContent = "Salvataggio…";
-  const r = await persistAppState();
+  const r = await Promise.race([
+    persistAppState(),
+    new Promise(res=>setTimeout(()=>res({ ok:false, error:"nessuna risposta dal server, controlla la connessione e riprova" }), 20000))
+  ]);
   if(r.ok){
     dirty = false;
     st.classList.remove("dirty");
