@@ -257,6 +257,11 @@
     <div><div class="n" id="dayTotalCount">0</div><div class="l" id="dayTotalLabel">iscritti</div></div>
     <div class="l" style="text-align:right;">tocca un nome per segnare presente,<br>poi premi Salva</div>
   </div>
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 16px 0;">
+    <button class="quick-day-btn" id="btnSelTutti" style="padding:8px 4px; font-size:12.5px; line-height:1.25;">Seleziona tutti</button>
+    <button class="quick-day-btn" id="btnSelCuccioli" style="padding:8px 4px; font-size:12.5px; line-height:1.25;">Seleziona cuccioli</button>
+    <button class="quick-day-btn" id="btnSelBaby" style="padding:8px 4px; font-size:12.5px; line-height:1.25;">Seleziona baby</button>
+  </div>
   <div class="searchbox">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     <input id="registerSearch" placeholder="Cerca per nome o cognome…">
@@ -384,6 +389,11 @@ function todayISO(offsetDays){
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
 
+// anni di nascita dall'elenco atleti (stesso ordine di SEED_2627): 2015/2016 = cuccioli, 2017/2018 = baby
+const ANNI_LISTA = [2015,2015,2015,2015,2015,2015,2015, 2016,2016,2016,2016,2016,2016,2016,2016,2016,2016,2016,2016,2016,2016, 2017,2017,2017,2017,2017,2017,2017,2017, 2018,2018,2018,2018,2018, 2019, 2020];
+const ANNI_NASCITA = {};
+function annoDi(p){ return Number(p.anno) || ANNI_NASCITA[(p.cognome + "|" + p.nome).toUpperCase()] || 0; }
+function gruppoDi(p){ const a = annoDi(p); return (a===2015 || a===2016) ? "cuccioli" : (a===2017 || a===2018) ? "baby" : ""; }
 function buildInitialPeople(){
   return RAW_DATA.people.map(p=>{
     const attendance = {};
@@ -502,6 +512,7 @@ const SEED_2627 = [
   ["SCHONEICH","GUGLIELMO"],
   ["GIROTTO","TOMMASO"]
 ];
+SEED_2627.forEach(([c,n],i)=>{ ANNI_NASCITA[c + "|" + n] = ANNI_LISTA[i]; });
 
 function defaultAppState(){
   return { seasons:[DEFAULT_SEASON], data:{ [DEFAULT_SEASON.id]: buildInitialPeople() } };
@@ -909,6 +920,13 @@ function renderRegisterList(){
   }
   list = [...list].sort((a,b)=>a.cognome.localeCompare(b.cognome) || a.nome.localeCompare(b.nome));
 
+  [["btnSelTutti","","tutti"],["btnSelCuccioli","cuccioli","cuccioli"],["btnSelBaby","baby","baby"]].forEach(([id,g,nome])=>{
+    const L = list.filter(p=>!g || gruppoDi(p)===g);
+    const tutti = L.length>0 && L.every(p=>p.attendance[registerDate]===1);
+    const b = document.getElementById(id);
+    b.innerHTML = (tutti ? "Deseleziona" : "Seleziona") + "<br>" + nome + " (" + L.length + ")";
+    b.disabled = L.length===0;
+  });
   const presentCount = people.filter(p=>p.attendance[registerDate]===1).length;
   document.getElementById("dayTotalCount").textContent = presentCount;
   document.getElementById("dayTotalLabel").textContent = `iscritti · ${fmtFull(registerDate)}`;
@@ -1302,6 +1320,21 @@ document.getElementById("rgViewG").addEventListener("click", ()=>{ rgView = "gio
 document.getElementById("srModeA").addEventListener("click", ()=>{ srMode = "prepara"; renderSkiroom(); });
 document.getElementById("srModeB").addEventListener("click", ()=>{ srMode = "registro"; renderSkiroom(); });
 
+function regSeleziona(gruppo){
+  let lista = people;
+  if(registerSearch.trim()){
+    const q = registerSearch.trim().toUpperCase();
+    lista = lista.filter(p=>p.cognome.toUpperCase().includes(q) || p.nome.toUpperCase().includes(q));
+  }
+  lista = lista.filter(p=>!gruppo || gruppoDi(p)===gruppo);
+  if(!lista.length) return;
+  const tutti = lista.every(p=>p.attendance[registerDate]===1);
+  lista.forEach(p=>{ if(tutti) delete p.attendance[registerDate]; else p.attendance[registerDate] = 1; });
+  saveData(); render();
+}
+document.getElementById("btnSelTutti").addEventListener("click", ()=>regSeleziona(""));
+document.getElementById("btnSelCuccioli").addEventListener("click", ()=>regSeleziona("cuccioli"));
+document.getElementById("btnSelBaby").addEventListener("click", ()=>regSeleziona("baby"));
 document.getElementById("registerDate").addEventListener("change", (e)=>{
   registerDate = e.target.value || todayISO(0);
   renderRegisterList();
