@@ -228,13 +228,10 @@
   <div class="season-chips" id="seasonChips"></div>
   <button class="season-add-btn" id="seasonAddToggle">+ Nuova stagione</button>
 </div>
-<div style="margin:8px 16px 0;"><button class="reset-btn" id="seasonDelBtn">🗑 Elimina stagione</button></div>
+<div style="margin:8px 16px 0;"><button class="reset-btn" id="seasonDelBtn">🗑 Elimina stagione</button> <button class="reset-btn" id="seasonFillBtn" title="Rimette in elenco i 36 atleti">↻ Ricompila elenco</button></div>
 <div class="season-form" id="seasonForm">
   <input id="seasonLabelInput" placeholder="Es. 2026/27">
-  <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-soft); margin-bottom:10px;">
-    <input type="checkbox" id="seasonCopyCheck" style="width:auto; margin:0;">
-    Copia l'elenco persone attuale (pasti e pagamenti azzerati)
-  </label>
+  <div style="font-size:13px; color:var(--ink-soft); margin-bottom:10px;">La nuova stagione parte sempre con l'elenco atleti, con pasti e pagamenti azzerati.</div>
   <div class="form-error" id="seasonError">Inserisci un nome per la stagione.</div>
   <div class="season-status" id="seasonStatus"></div>
   <button class="save" id="seasonCreateBtn">Crea stagione</button>
@@ -666,7 +663,34 @@ function clearSeasonStatus(){
   el.textContent = "";
 }
 
-async function createSeason(label, copyCurrent){
+// elenco atleti fisso (dalla foto del foglio ATLETI): ogni nuova stagione parte da qui
+function elencoAtleti(){
+  return SEED_2627.map(([c,n],i)=>({ id:i+1, cognome:c, nome:n, attendance:{}, pagato:0 }));
+}
+// rimette in elenco gli atleti della stagione attuale: chi c'è già tiene pasti, versamenti e ski room
+function ricompilaElenco(){
+  const lista = elencoAtleti();
+  const key = p => normNome(p.cognome + " " + p.nome);
+  const attuali = new Map(people.map(p=>[key(p), p]));
+  const nomiLista = new Set(lista.map(key));
+  const daTogliere = people.filter(p=>!nomiLista.has(key(p)));
+  const mancanti = lista.filter(x=>!attuali.has(key(x)));
+  const pasti = daTogliere.reduce((t,p)=>t+pastiConsumati(p), 0), versato = daTogliere.reduce((t,p)=>t+(p.pagato||0), 0);
+  let msg = "Ricompilare l'elenco di questa stagione con i " + lista.length + " atleti?\n\nChi è già in elenco mantiene pasti, versamenti e Ski room.\nAggiunti: " + mancanti.length + ".\nTolti: " + daTogliere.length;
+  if(daTogliere.length){
+    msg += " (" + daTogliere.slice(0,8).map(p=>p.cognome+" "+p.nome).join(", ") + (daTogliere.length>8 ? "…" : "") + ")";
+    if(pasti || versato) msg += "\nAttenzione: con loro si perdono " + pasti + " pasti e " + versato + " € versati.";
+  }
+  msg += "\n\nDopo devi premere Salva.";
+  if(!confirm(msg)) return;
+  let nextId = people.reduce((m,p)=>Math.max(m, p.id||0), 0) + 1;
+  const nuovi = lista.map(x=> attuali.get(key(x)) || { ...x, id: nextId++ });
+  people = nuovi;
+  appState.data[currentSeasonId] = people;
+  expandedId = null; expandedDate = null;
+  saveData(); render();
+}
+async function createSeason(label){
   label = (label||"").trim();
   const errEl = document.getElementById("seasonError");
   if(!label){ errEl.classList.add("show"); clearSeasonStatus(); return; }
@@ -682,9 +706,7 @@ async function createSeason(label, copyCurrent){
   setSeasonStatus("busy", "Creazione in corso…");
 
   const newId = "s" + Date.now() + Math.floor(Math.random()*1000);
-  const newPeopleData = copyCurrent
-    ? people.map(p=>({ id:p.id, cognome:p.cognome, nome:p.nome, attendance:{}, pagato:0 }))
-    : [];
+  const newPeopleData = elencoAtleti();
 
   const prevSeasons = appState.seasons;
   const prevDataEntry = appState.data[newId];
@@ -705,7 +727,6 @@ async function createSeason(label, copyCurrent){
   btn.disabled = false;
   setSeasonStatus("ok", `Stagione "${label}" creata!`);
   document.getElementById("seasonLabelInput").value = "";
-  document.getElementById("seasonCopyCheck").checked = false;
   await switchSeason(newId);
   setTimeout(()=>{
     document.getElementById("seasonForm").classList.remove("open");
@@ -1407,14 +1428,14 @@ document.getElementById("addSave").addEventListener("click", ()=>{
 document.getElementById("resetBtn").addEventListener("click", requestReset);
 document.getElementById("saveBtn").addEventListener("click", saveNow);
 document.getElementById("seasonDelBtn").addEventListener("click", requestDeleteSeason);
+document.getElementById("seasonFillBtn").addEventListener("click", ricompilaElenco);
 window.addEventListener("beforeunload", (e)=>{ if(dirty){ e.preventDefault(); e.returnValue = ""; } });
 
 document.getElementById("seasonAddToggle").addEventListener("click", ()=>{
   document.getElementById("seasonForm").classList.toggle("open");
 });
 document.getElementById("seasonCreateBtn").addEventListener("click", ()=>{
-  const copy = document.getElementById("seasonCopyCheck").checked;
-  createSeason(document.getElementById("seasonLabelInput").value, copy);
+  createSeason(document.getElementById("seasonLabelInput").value);
 });
 document.getElementById("seasonLabelInput").addEventListener("input", ()=>document.getElementById("seasonError").classList.remove("show"));
 
