@@ -185,6 +185,15 @@
   .sr-btns button{ flex:1; padding:11px 4px; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:700; font-size:12.5px; line-height:1.2; }
   .sr-btns button:disabled{ opacity:.35; }
   .sr-tag{ font-weight:700; }
+  #bkOverlay{ position:fixed; inset:0; z-index:2000; background:rgba(10,25,60,.55); display:none; align-items:flex-end; }
+  #bkOverlay.show{ display:flex; }
+  .bk-sheet{ background:var(--bg); width:100%; max-height:88vh; overflow-y:auto; border-radius:18px 18px 0 0; padding:16px 18px calc(24px + env(safe-area-inset-bottom)); }
+  .bk-btn{ width:100%; padding:13px; border-radius:12px; border:none; background:var(--blue); color:#fff; font-weight:800; font-size:14px; margin:6px 0; }
+  .bk-btn.sec{ background:#fff; color:var(--blue); border:1.5px solid var(--blue); }
+  .bk-ta{ width:100%; min-height:90px; border:1px solid var(--border); border-radius:10px; padding:10px; font-size:12px; background:#fff; margin:6px 0; }
+  .bk-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:#fff; border:1px solid var(--border); border-radius:10px; padding:9px 12px; margin:6px 0; font-size:13.5px; }
+  .bk-mini{ border:1.5px solid var(--blue); background:#fff; color:var(--blue); border-radius:9px; padding:7px 12px; font-weight:800; font-size:12.5px; }
+  .bk-lbl{ font-size:12px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.4px; margin:16px 0 4px; }
   .sr-chip:disabled{ opacity:.4; }
   .sr-cap{ font-size:10.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.4px; margin:0 0 4px; }
   .rg-day{ background:#fff; border-radius:14px; overflow:hidden; }
@@ -297,6 +306,26 @@
   <div class="list" id="daysList"></div>
 </div>
 
+<div id="bkOverlay"><div class="bk-sheet">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+    <div style="font-size:19px; font-weight:800; color:var(--blue-dark);">Backup dati</div>
+    <button id="bkClose" style="background:var(--border); border:none; border-radius:999px; width:32px; height:32px; font-size:16px;">✕</button>
+  </div>
+  <div id="bkInfo" style="font-size:13px; color:var(--ink-soft); line-height:1.5;"></div>
+  <div class="bk-lbl" style="margin-top:12px;">Copie nell'app</div>
+  <div style="font-size:12.5px; color:var(--ink-soft); line-height:1.45; margin-bottom:6px;">Il registro ne fa una da solo al giorno (la prima volta che salvi) e tiene le ultime 15. Le vede e le può ripristinare chiunque usi l'app.</div>
+  <button class="bk-btn sec" id="bkNuovaCopia">➕ Salva una copia adesso</button>
+  <div id="bkCopie"></div>
+  <div class="bk-lbl">Backup da portare fuori dall'app</div>
+  <button class="bk-btn" id="bkCopiaBtn">📋 Copia backup</button>
+  <textarea class="bk-ta" id="bkCopia" readonly style="display:none;"></textarea>
+  <div class="bk-lbl">Ripristina da backup</div>
+  <input type="file" id="bkFile" accept=".json,application/json,text/plain" style="margin-bottom:6px; font-size:13px; max-width:100%;">
+  <textarea class="bk-ta" id="bkTesto" placeholder="oppure incolla qui il testo del backup"></textarea>
+  <button class="bk-btn sec" id="bkRipBtn">Ripristina</button>
+  <div id="bkMsg" style="font-size:13px; font-weight:700; color:var(--blue-dark); margin-top:8px; line-height:1.4;"></div>
+</div></div>
+
 <!-- ATTREZZATURA -->
 <div id="attrezzaturaView" style="display:none;">
   <div class="hint" style="margin-top:14px;" id="skCount"></div>
@@ -371,6 +400,7 @@
 </div>
 
 <div class="footer">
+  <button class="reset-btn" id="bkBtn" style="margin-right:8px;">💾 Backup</button>
   <button class="reset-btn" id="logoutBtn" style="margin-right:8px;">⎋ Esci</button>
   <button class="reset-btn" id="resetBtn">↺ Ripristina dati originali</button>
 </div>
@@ -624,6 +654,7 @@ async function saveNow(){
   const btn = document.getElementById("saveBtn");
   btn.disabled = true;
   st.textContent = "Salvataggio…";
+  bkAutoCopia();
   const r = await Promise.race([
     persistAppState(),
     new Promise(res=>setTimeout(()=>res({ ok:false, error:"nessuna risposta dal server, controlla la connessione e riprova" }), 20000))
@@ -1393,6 +1424,142 @@ document.getElementById("regGroups").addEventListener("click", e=>{
   const c = e.target.closest(".sr-chip");
   if(c) regSeleziona(c.dataset.g);
 });
+// ---------- BACKUP E RIPRISTINO ----------
+const BK_KEY = "pranzi_ultimoBackup";
+function bkTesto(){
+  appState.data[currentSeasonId] = people;
+  return JSON.stringify({ app:"registro-pranzi", versione:1, creato:new Date().toISOString(), stato:appState });
+}
+function bkGiorni(){
+  let d = null;
+  try{ d = localStorage.getItem(BK_KEY); }catch(e){}
+  if(!d) return null;
+  return Math.round((new Date(todayISO(0) + "T00:00:00") - new Date(d + "T00:00:00")) / 86400000);
+}
+function bkAggiornaBottone(){
+  const g = bkGiorni(), b = document.getElementById("bkBtn");
+  b.style.borderColor = (g===null || g>=30) ? "#E0A800" : "";
+  b.title = g===null ? "Backup mai fatto" : (g===0 ? "Ultimo backup: oggi" : "Ultimo backup: " + g + " giorni fa");
+}
+function bkStatoTesto(){
+  appState.data[currentSeasonId] = people;
+  return JSON.stringify(appState);
+}
+const BK_TIPI = { auto:"automatica", manuale:"manuale", prima:"prima di un ripristino" };
+function bkQuando(t){
+  const d = new Date(t);
+  return d.toLocaleDateString("it-IT", { day:"numeric", month:"short" }) + " · " + d.toLocaleTimeString("it-IT", { hour:"2-digit", minute:"2-digit" });
+}
+async function bkCaricaCopie(){
+  const box = document.getElementById("bkCopie");
+  if(!window.cloudCopie){ box.textContent = "Le copie nell'app sono disponibili solo con l'accesso online."; return; }
+  box.textContent = "Carico le copie…";
+  try{
+    const l = await window.cloudCopie.lista();
+    if(!l.length){ box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">Nessuna copia ancora: la prima si crea da sola al prossimo salvataggio, oppure tocca «Salva una copia adesso».</div>'; return; }
+    box.innerHTML = l.map(x=>`<div class="bk-row"><div><div style="font-weight:700;">${bkQuando(x.t)}</div><div style="font-size:12px; color:var(--ink-soft);">${BK_TIPI[x.kind]||x.kind}</div></div><button class="bk-mini" data-copia="${x.id}" data-t="${x.t}">Ripristina</button></div>`).join("");
+  }catch(e){ box.textContent = "Impossibile leggere le copie: serve la connessione."; }
+}
+async function bkNuovaCopia(){
+  if(!window.cloudCopie){ bkMsg("Serve l'accesso online."); return; }
+  bkMsg("Salvo la copia…");
+  try{ await window.cloudCopie.crea("manuale", bkStatoTesto()); bkMsg("Copia salvata."); bkCaricaCopie(); }
+  catch(e){ bkMsg("Copia non riuscita: controlla la connessione e riprova."); }
+}
+// una copia al giorno: la prima volta che si salva, con lo stato di prima del salvataggio
+async function bkAutoCopia(){
+  try{
+    const base = window.cloud && window.cloud.base;
+    if(!window.cloudCopie || !base) return;
+    const oggi = todayISO(0);
+    if(localStorage.getItem("pranzi_autoCopia")===oggi) return;
+    localStorage.setItem("pranzi_autoCopia", oggi);
+    await window.cloudCopie.crea("auto", base);
+  }catch(e){ try{ localStorage.removeItem("pranzi_autoCopia"); }catch(_){} }
+}
+async function bkApplicaStato(testo){
+  if(window.cloudCopie){
+    try{ await window.cloudCopie.crea("prima", bkStatoTesto()); }
+    catch(e){ bkMsg("Non sono riuscito a salvare la copia di sicurezza: controlla la connessione e riprova."); return; }
+  }
+  window.cloud.force = true;
+  window.applyRemote(testo);
+  saveData();
+  bkChiudi();
+  await saveNow();
+}
+async function bkRipristinaCopia(id, t){
+  let testo = null;
+  try{ testo = await window.cloudCopie.leggi(id); }catch(e){}
+  let st = null;
+  try{ st = JSON.parse(testo); }catch(e){}
+  if(!st || !Array.isArray(st.seasons) || !st.data){ bkMsg("Copia non leggibile."); return; }
+  if(!confirm("Ripristinare la copia del " + bkQuando(t) + "?\n\nI dati attuali vengono sostituiti da quelli della copia, anche per gli altri che usano l'app. Prima salvo una copia dei dati attuali: la ritrovi in «Copie nell'app» e puoi tornare indietro.\n\nProcedere?")) return;
+  await bkApplicaStato(testo);
+}
+function bkMsg(t){ document.getElementById("bkMsg").textContent = t; }
+function bkApri(){
+  const g = bkGiorni();
+  document.getElementById("bkInfo").textContent = "I dati sono nel cloud e li vedono tutti quelli che usano l'app. Qui sotto trovi le copie di sicurezza: puoi tornare a una di queste con un tocco." + (g===null ? "" : " Ultimo backup copiato fuori dall'app: " + (g===0 ? "oggi" : g + " giorni fa") + ".");
+  bkMsg("");
+  document.getElementById("bkCopia").style.display = "none";
+  document.getElementById("bkOverlay").classList.add("show");
+  bkCaricaCopie();
+}
+function bkChiudi(){ document.getElementById("bkOverlay").classList.remove("show"); }
+async function bkCopia(){
+  const txt = bkTesto();
+  let ok = false;
+  try{ await navigator.clipboard.writeText(txt); ok = true; }catch(e){}
+  if(!ok){
+    try{
+      const ta = document.createElement("textarea"); ta.value = txt; ta.style.cssText = "position:fixed; opacity:0;";
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, txt.length);
+      ok = document.execCommand("copy"); ta.remove();
+    }catch(e){}
+  }
+  try{ localStorage.setItem(BK_KEY, todayISO(0)); }catch(e){}
+  if(ok){ bkMsg("Backup copiato: incollalo in una nota o in un messaggio a te stesso."); }
+  else {
+    const box = document.getElementById("bkCopia");
+    box.style.display = "block"; box.value = txt; box.focus(); box.select(); box.setSelectionRange(0, txt.length);
+    bkMsg("Tieni premuto sul testo, scegli Seleziona tutto e poi Copia.");
+  }
+  bkAggiornaBottone();
+}
+function bkLeggiFile(input){
+  const f = input.files && input.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{ document.getElementById("bkTesto").value = String(r.result || ""); };
+  r.onerror = ()=> bkMsg("Impossibile leggere il file.");
+  r.readAsText(f);
+}
+async function bkRipristina(){
+  const txt = (document.getElementById("bkTesto").value || "").trim();
+  let b = null;
+  try{ b = JSON.parse(txt); }catch(e){}
+  if(!b || b.app!=="registro-pranzi" || !b.stato || !Array.isArray(b.stato.seasons) || !b.stato.data || typeof b.stato.data!=="object"){
+    bkMsg("Backup non valido: controlla di aver incollato tutto il testo."); return;
+  }
+  const st = b.stato;
+  const nBamb = Math.max(0, ...Object.values(st.data).map(a=>(a||[]).length));
+  const quando = b.creato ? fmtFull(String(b.creato).slice(0,10)) : "data sconosciuta";
+  if(!confirm("Il backup è del " + quando + ": " + st.seasons.length + " stagion" + (st.seasons.length===1 ? "e" : "i") + ", fino a " + nBamb + " bambini, " + (st.schede||[]).length + " schede.\n\nRipristinandolo, TUTTI i dati attuali vengono sostituiti da quelli del backup, anche per gli altri che usano l'app. Prima salvo una copia dei dati attuali: la ritrovi in «Copie nell'app» e puoi tornare indietro.\n\nProcedere?")) return;
+  await bkApplicaStato(JSON.stringify(st));
+}
+document.getElementById("bkBtn").addEventListener("click", bkApri);
+document.getElementById("bkClose").addEventListener("click", bkChiudi);
+document.getElementById("bkOverlay").addEventListener("click", e=>{ if(e.target.id==="bkOverlay") bkChiudi(); });
+document.getElementById("bkCopiaBtn").addEventListener("click", bkCopia);
+document.getElementById("bkNuovaCopia").addEventListener("click", bkNuovaCopia);
+document.getElementById("bkCopie").addEventListener("click", e=>{
+  const b = e.target.closest("[data-copia]");
+  if(b) bkRipristinaCopia(b.dataset.copia, b.dataset.t);
+});
+document.getElementById("bkFile").addEventListener("change", e=>bkLeggiFile(e.target));
+document.getElementById("bkRipBtn").addEventListener("click", bkRipristina);
+bkAggiornaBottone();
+
 document.getElementById("registerDate").addEventListener("change", (e)=>{
   registerDate = e.target.value || todayISO(0);
   renderRegisterList();
@@ -1454,7 +1621,7 @@ window.startApp = loadData;
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
-import {initializeFirestore,persistentLocalCache,doc,getDoc,onSnapshot,runTransaction,serverTimestamp} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+import {initializeFirestore,persistentLocalCache,doc,getDoc,onSnapshot,runTransaction,serverTimestamp,collection,getDocs,setDoc,deleteDoc} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyCt9D9Uomu3rNhDq1qDICuWnUdZJjmLlow",
@@ -1522,12 +1689,33 @@ window.cloudSave = async function(val){
   await runTransaction(db, async tx=>{
     const s = await tx.get(ref), r = s.exists() ? s.data() : null;
     out = val; merged = false;
-    if(r && r.rev !== cloud.rev){ out = mergeState(cloud.base, val, r.state); merged = true; }
+    if(r && r.rev !== cloud.rev && !cloud.force){ out = mergeState(cloud.base, val, r.state); merged = true; }
     rev = (r ? r.rev : 0) + 1;
     tx.set(ref, { state: out, rev, by: auth.currentUser.email, at: serverTimestamp() });
   });
-  cloud.raw = cloud.base = out; cloud.rev = rev;
+  cloud.raw = cloud.base = out; cloud.rev = rev; cloud.force = false;
   if(merged) window.applyRemote(out);
+};
+
+// copie di sicurezza dentro l'app: si tengono le ultime 15, visibili e ripristinabili da chiunque usi l'app
+window.cloudCopie = {
+  async lista(){
+    const snap = await getDocs(collection(db, "pranzi")), out = [];
+    snap.forEach(d=>{ if(d.id.startsWith("copia-")){ const v = d.data(); out.push({ id:d.id, t:v.t, kind:v.kind }); } });
+    out.sort((a,b)=> a.t < b.t ? 1 : -1);
+    return out;
+  },
+  async crea(kind, testo){
+    const id = "copia-" + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+    await setDoc(doc(db, "pranzi", id), { t: new Date().toISOString(), kind, by: auth.currentUser.email, stato: testo });
+    const l = await this.lista();
+    for(const x of l.slice(15)) await deleteDoc(doc(db, "pranzi", x.id));
+    return id;
+  },
+  async leggi(id){
+    const s = await getDoc(doc(db, "pranzi", id));
+    return s.exists() ? s.data().stato : null;
+  }
 };
 
 $("loginBtn").onclick = async ()=>{
