@@ -313,7 +313,7 @@
   </div>
   <div id="bkInfo" style="font-size:13px; color:var(--ink-soft); line-height:1.5;"></div>
   <div class="bk-lbl" style="margin-top:12px;">Copie nell'app</div>
-  <div style="font-size:12.5px; color:var(--ink-soft); line-height:1.45; margin-bottom:6px;">Il registro ne fa una da solo al giorno (la prima volta che salvi) e tiene le ultime 15. Le vede e le può ripristinare chiunque usi l'app.</div>
+  <div style="font-size:12.5px; color:var(--ink-soft); line-height:1.45; margin-bottom:6px;">Il registro ne fa una da solo ogni sera (dalle 20, appena qualcuno apre l'app; se nessuno la apre, la mattina dopo) e una a inizio giornata, la prima volta che salvi. Tiene le ultime 40. Le vede e le può ripristinare chiunque usi l'app.</div>
   <button class="bk-btn sec" id="bkNuovaCopia">➕ Salva una copia adesso</button>
   <div id="bkCopie"></div>
   <div class="bk-lbl">Backup da portare fuori dall'app</div>
@@ -1099,14 +1099,23 @@ const SK_FIELDS = [
   ["scarpMisura","Scarponi · misura (mm)","decimal"],
   ["scarpModello","Scarponi · modello","text"],
   ["scarpDurezza","Scarponi · durezza (flex)","decimal"],
-  ["sciModello","Sci · modello","text"],
-  ["sciAltezza","Sci · altezza (cm)","decimal"]
+  ["slalomModello","Sci slalom · modello","text"],
+  ["slalomLunghezza","Sci slalom · lunghezza (cm)","decimal"],
+  ["giganteModello","Sci gigante · modello","text"],
+  ["giganteLunghezza","Sci gigante · lunghezza (cm)","decimal"]
+];
+// vecchi campi "sci" (modello/altezza unici): si vedono solo se compilati, per spostare i valori e poi svuotarli
+const SK_VECCHI = [
+  ["sciModello","Sci · modello (campo precedente)","text"],
+  ["sciAltezza","Sci · altezza (campo precedente, cm)","decimal"]
 ];
 function skSummary(x){
   const a = [];
-  if(x.scarpMisura) a.push(x.scarpMisura+" mm");
-  if(x.scarpDurezza) a.push("flex "+x.scarpDurezza);
-  if(x.sciAltezza) a.push("sci "+x.sciAltezza+" cm");
+  if(x.scarpMisura) a.push(x.scarpMisura + " mm");
+  if(x.scarpDurezza) a.push("flex " + x.scarpDurezza);
+  if(x.slalomLunghezza) a.push("slalom " + x.slalomLunghezza);
+  if(x.giganteLunghezza) a.push("gigante " + x.giganteLunghezza);
+  if(x.sciAltezza) a.push("sci " + x.sciAltezza + " cm");
   return a.length ? a.join(" · ") : "da compilare";
 }
 function renderSchede(){
@@ -1127,7 +1136,7 @@ function renderSchede(){
     const open = skOpen===x.id;
     let body = "";
     if(open){
-      body = '<div class="sk-body">' + SK_FIELDS.map(f=>`<label class="sk-lbl">${f[1]}</label><input class="sk-in" data-id="${x.id}" data-f="${f[0]}" inputmode="${f[2]}" value="${skEsc(x[f[0]])}">`).join("")
+      body = '<div class="sk-body">' + SK_FIELDS.concat((x.sciModello || x.sciAltezza) ? SK_VECCHI : []).map(f=>`<label class="sk-lbl">${f[1]}</label><input class="sk-in" data-id="${x.id}" data-f="${f[0]}" inputmode="${f[2]}" value="${skEsc(x[f[0]])}">`).join("")
         + `<button class="reset-btn sk-del" data-del="${x.id}">${skDelPending===x.id ? "Tocca di nuovo per eliminare" : "🗑 Elimina scheda"}</button></div>`;
     }
     return `<div class="sk-card"><button class="sk-head" data-open="${x.id}"><div><div class="sk-name">${skEsc(x.nome)}</div><div class="sk-sub">${skEsc(skSummary(x))}</div></div><span>${open?"⌃":"⌄"}</span></button>${body}</div>`;
@@ -1169,7 +1178,7 @@ document.getElementById("skAddSave").addEventListener("click", ()=>{
   if(!nome){ err.classList.add("show"); return; }
   err.classList.remove("show");
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-  schede().push({ id, nome, scarpMisura:"", scarpModello:"", scarpDurezza:"", sciModello:"", sciAltezza:"" });
+  schede().push({ id, nome, scarpMisura:"", scarpModello:"", scarpDurezza:"", slalomModello:"", slalomLunghezza:"", giganteModello:"", giganteLunghezza:"" });
   inp.value = ""; document.getElementById("skAddForm").classList.remove("open");
   skSearch = ""; document.getElementById("skSearch").value = "";
   skOpen = id; saveData(); renderSchede();
@@ -1445,7 +1454,33 @@ function bkStatoTesto(){
   appState.data[currentSeasonId] = people;
   return JSON.stringify(appState);
 }
-const BK_TIPI = { auto:"automatica", manuale:"manuale", prima:"prima di un ripristino" };
+const BK_TIPI = { auto:"automatica (inizio giornata)", manuale:"manuale", prima:"prima di un ripristino", sera:"automatica della sera" };
+const ORA_COPIA_SERA = 20;   // ogni sera dalle 20:00
+function seraRiferimento(){
+  const ora = new Date(), d = new Date(ora);
+  if(ora.getHours() < ORA_COPIA_SERA) d.setDate(d.getDate() - 1);
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+let bkSeraInCorso = false;
+// la copia della sera si fa la prima volta che l'app è aperta dopo le 20 (o la mattina dopo, se nessuno l'ha aperta): lo stato è lo stesso
+async function bkControllaSera(){
+  if(bkSeraInCorso || !window.cloudCopie || !window.cloud || !window.cloud.pronto) return;
+  const sera = seraRiferimento();
+  try{ if(localStorage.getItem("pranzi_seraFatta")===sera) return; }catch(e){}
+  bkSeraInCorso = true;
+  try{
+    const l = await window.cloudCopie.lista();
+    if(!l.some(x=>x.kind==="sera" && x.sera===sera)){
+      const testo = await window.cloudCopie.statoAttuale();
+      if(testo) await window.cloudCopie.crea("sera", testo, { sera });
+    }
+    localStorage.setItem("pranzi_seraFatta", sera);
+  }catch(e){ console.error(e); }
+  bkSeraInCorso = false;
+}
+window.bkControllaSera = bkControllaSera;
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") bkControllaSera(); });
+setInterval(bkControllaSera, 10 * 60 * 1000);
 function bkQuando(t){
   const d = new Date(t);
   return d.toLocaleDateString("it-IT", { day:"numeric", month:"short" }) + " · " + d.toLocaleTimeString("it-IT", { hour:"2-digit", minute:"2-digit" });
@@ -1457,7 +1492,12 @@ async function bkCaricaCopie(){
   try{
     const l = await window.cloudCopie.lista();
     if(!l.length){ box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">Nessuna copia ancora: la prima si crea da sola al prossimo salvataggio, oppure tocca «Salva una copia adesso».</div>'; return; }
-    box.innerHTML = l.map(x=>`<div class="bk-row"><div><div style="font-weight:700;">${bkQuando(x.t)}</div><div style="font-size:12px; color:var(--ink-soft);">${BK_TIPI[x.kind]||x.kind}</div></div><button class="bk-mini" data-copia="${x.id}" data-t="${x.t}">Ripristina</button></div>`).join("");
+    box.innerHTML = l.map(x=>{
+      const sera = x.kind==="sera" && x.sera;
+      const titolo = sera ? "Sera del " + new Date(x.sera + "T00:00:00").toLocaleDateString("it-IT", { day:"numeric", month:"short" }) : bkQuando(x.t);
+      const sotto = sera ? BK_TIPI.sera + " · fatta " + bkQuando(x.t) : (BK_TIPI[x.kind] || x.kind);
+      return `<div class="bk-row"><div><div style="font-weight:700;">${titolo}</div><div style="font-size:12px; color:var(--ink-soft);">${sotto}</div></div><button class="bk-mini" data-copia="${x.id}" data-q="${titolo}">Ripristina</button></div>`;
+    }).join("");
   }catch(e){ box.textContent = "Impossibile leggere le copie: serve la connessione."; }
 }
 async function bkNuovaCopia(){
@@ -1488,13 +1528,13 @@ async function bkApplicaStato(testo){
   bkChiudi();
   await saveNow();
 }
-async function bkRipristinaCopia(id, t){
+async function bkRipristinaCopia(id, etichetta){
   let testo = null;
   try{ testo = await window.cloudCopie.leggi(id); }catch(e){}
   let st = null;
   try{ st = JSON.parse(testo); }catch(e){}
   if(!st || !Array.isArray(st.seasons) || !st.data){ bkMsg("Copia non leggibile."); return; }
-  if(!confirm("Ripristinare la copia del " + bkQuando(t) + "?\n\nI dati attuali vengono sostituiti da quelli della copia, anche per gli altri che usano l'app. Prima salvo una copia dei dati attuali: la ritrovi in «Copie nell'app» e puoi tornare indietro.\n\nProcedere?")) return;
+  if(!confirm("Ripristinare la copia «" + etichetta + "»?\n\nI dati attuali vengono sostituiti da quelli della copia, anche per gli altri che usano l'app. Prima salvo una copia dei dati attuali: la ritrovi in «Copie nell'app» e puoi tornare indietro.\n\nProcedere?")) return;
   await bkApplicaStato(testo);
 }
 function bkMsg(t){ document.getElementById("bkMsg").textContent = t; }
@@ -1554,7 +1594,7 @@ document.getElementById("bkCopiaBtn").addEventListener("click", bkCopia);
 document.getElementById("bkNuovaCopia").addEventListener("click", bkNuovaCopia);
 document.getElementById("bkCopie").addEventListener("click", e=>{
   const b = e.target.closest("[data-copia]");
-  if(b) bkRipristinaCopia(b.dataset.copia, b.dataset.t);
+  if(b) bkRipristinaCopia(b.dataset.copia, b.dataset.q);
 });
 document.getElementById("bkFile").addEventListener("change", e=>bkLeggiFile(e.target));
 document.getElementById("bkRipBtn").addEventListener("click", bkRipristina);
@@ -1638,6 +1678,7 @@ const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db = initializeFirestore(app, { localCache: persistentLocalCache() });
 const ref = doc(db, "pranzi", "stato");
+const IDX = doc(db, "pranzi", "copie-indice");
 const cloud = window.cloud;
 
 // unisce le modifiche locali (rispetto a base) con quelle già presenti nel cloud (r)
@@ -1699,17 +1740,38 @@ window.cloudSave = async function(val){
 
 // copie di sicurezza dentro l'app: si tengono le ultime 15, visibili e ripristinabili da chiunque usi l'app
 window.cloudCopie = {
+  // l'elenco sta in un solo documento piccolo ("indice"), così aprire la finestra non scarica tutte le copie
   async lista(){
-    const snap = await getDocs(collection(db, "pranzi")), out = [];
-    snap.forEach(d=>{ if(d.id.startsWith("copia-")){ const v = d.data(); out.push({ id:d.id, t:v.t, kind:v.kind }); } });
-    out.sort((a,b)=> a.t < b.t ? 1 : -1);
-    return out;
+    const s = await getDoc(IDX);
+    if(s.exists()) return s.data().items || [];
+    const snap = await getDocs(collection(db, "pranzi")), items = [];
+    snap.forEach(d=>{ if(d.id.startsWith("copia-")){ const v = d.data(); items.push({ id:d.id, t:v.t, kind:v.kind, sera:v.sera || "" }); } });
+    items.sort((a,b)=> a.t < b.t ? 1 : -1);
+    await setDoc(IDX, { items });
+    return items;
   },
-  async crea(kind, testo){
+  async statoAttuale(){
+    const s = await getDoc(ref);
+    return s.exists() ? s.data().state : null;
+  },
+  async crea(kind, testo, extra){
     const id = "copia-" + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
-    await setDoc(doc(db, "pranzi", id), { t: new Date().toISOString(), kind, by: auth.currentUser.email, stato: testo });
-    const l = await this.lista();
-    for(const x of l.slice(15)) await deleteDoc(doc(db, "pranzi", x.id));
+    const t = new Date().toISOString(), sera = (extra && extra.sera) || "";
+    await setDoc(doc(db, "pranzi", id), { t, kind, sera, by: auth.currentUser.email, stato: testo });
+    await this.lista();
+    let tolte = [], doppia = false;
+    await runTransaction(db, async tx=>{
+      const s = await tx.get(IDX);
+      let items = s.exists() ? (s.data().items || []) : [];
+      doppia = !!sera && items.some(x=>x.kind==="sera" && x.sera===sera);
+      tolte = [];
+      if(doppia) return;
+      items = [{ id, t, kind, sera }, ...items].sort((a,b)=> a.t < b.t ? 1 : -1);
+      tolte = items.slice(40);
+      tx.set(IDX, { items: items.slice(0, 40) });
+    });
+    if(doppia){ await deleteDoc(doc(db, "pranzi", id)); return null; }
+    for(const x of tolte) await deleteDoc(doc(db, "pranzi", x.id));
     return id;
   },
   async leggi(id){
@@ -1740,6 +1802,8 @@ onAuthStateChanged(auth, async u=>{
     started = false; return;
   }
   await window.startApp();
+  window.cloud.pronto = true;
+  if(window.bkControllaSera) window.bkControllaSera();
   if(!existed) await saveNow();
   onSnapshot(ref, s=>{
     if(!s.exists() || s.metadata.hasPendingWrites) return;
