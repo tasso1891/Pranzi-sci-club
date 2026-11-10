@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#14306B">
+<title>Pranzi · Sci Club</title>
+<style>
+  :root{ --blue:#1D4ED8; --dark:#14306B; --yellow:#F2B705; --bg:#EEF3FF; --ink:#0F1B3D; --soft:#5B6B8F; --border:#D5DEF2; --ok:#1E8E4E; --warn:#B7791F; --bad:#C0392B; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  .top{ background:var(--dark); color:#fff; padding:calc(22px + env(safe-area-inset-top)) 20px 22px; }
+  .eyebrow{ font-size:12px; letter-spacing:.14em; font-weight:800; color:var(--yellow); }
+  h1{ margin:4px 0 0; font-size:24px; }
+  main{ padding:16px; max-width:560px; margin:0 auto; }
+  .card{ background:#fff; border:1px solid var(--border); border-radius:16px; padding:16px; margin-bottom:12px; }
+  .name{ font-size:22px; font-weight:800; }
+  .sub{ color:var(--soft); font-size:13px; margin-top:2px; }
+  .badge{ display:inline-block; margin-top:10px; padding:6px 12px; border-radius:999px; font-weight:800; font-size:13px; color:#fff; }
+  .OK{ background:var(--ok); } .RICARICARE{ background:var(--warn); } .PAGARE{ background:var(--bad); }
+  .detail{ margin-top:8px; font-size:15px; font-weight:600; }
+  .tiles{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:14px; }
+  .tile{ background:var(--bg); border-radius:12px; padding:10px 6px; text-align:center; }
+  .tile b{ display:block; font-size:20px; }
+  .tile span{ font-size:11.5px; color:var(--soft); }
+  h2{ font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--soft); margin:0 0 8px; }
+  .row{ display:flex; justify-content:space-between; gap:8px; padding:9px 0; border-top:1px solid var(--border); font-size:14.5px; }
+  .row:first-of-type{ border-top:none; }
+  .vuoto{ color:var(--soft); font-size:14px; }
+  .foot{ text-align:center; color:var(--soft); font-size:12px; margin:14px 0 24px; }
+</style>
+</head>
+<body>
+<div class="top"><div class="eyebrow">SCI CLUB</div><h1>Registro Pranzi</h1></div>
+<main id="out"><div class="card vuoto">Caricamento…</div></main>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCt9D9Uomu3rNhDq1qDICuWnUdZJjmLlow",
+  authDomain: "gestionale-422df.firebaseapp.com",
+  projectId: "gestionale-422df",
+  storageBucket: "gestionale-422df.firebasestorage.app",
+  messagingSenderId: "821831582537",
+  appId: "1:821831582537:web:51bc9804bc708c24369098"
+};
+const out = document.getElementById("out");
+function el(tag, cls, txt){ const e = document.createElement(tag); if(cls) e.className = cls; if(txt!==undefined) e.textContent = txt; return e; }
+function data(iso){
+  if(!iso) return "Versato in precedenza";
+  return new Date(iso + "T00:00:00").toLocaleDateString("it-IT", { weekday:"short", day:"numeric", month:"short", year:"numeric" });
+}
+function errore(t){ out.replaceChildren(Object.assign(el("div", "card vuoto", t))); }
+
+const token = new URLSearchParams(location.search).get("c");
+if(!token || !/^[A-Za-z0-9]{16,64}$/.test(token)){
+  errore("Link non valido. Chiedi il link giusto a chi gestisce i pranzi.");
+} else {
+  try{
+    const db = getFirestore(initializeApp(firebaseConfig));
+    const snap = await getDoc(doc(db, "genitori", token));
+    if(!snap.exists()){ errore("Questo link non è ancora attivo o non è più valido. Chiedi un nuovo link a chi gestisce i pranzi."); }
+    else{
+      const d = snap.data();
+      const frag = document.createDocumentFragment();
+      const c1 = el("div", "card");
+      c1.append(el("div", "name", d.nome), el("div", "sub", "Stagione " + d.stagione));
+      c1.append(el("span", "badge " + d.stato.code, d.stato.label), el("div", "detail", d.stato.detail));
+      const t = el("div", "tiles");
+      [[d.rimanenti, "pasti rimanenti"], ["€ " + d.pagato, "versati"], [d.consumati, "pasti mangiati"]].forEach(([v, l])=>{ const x = el("div", "tile"); x.append(el("b", "", String(v)), el("span", "", l)); t.append(x); });
+      c1.append(t, el("div", "sub", "Ogni pasto costa € " + d.prezzo + "."));
+      frag.append(c1);
+      const c2 = el("div", "card"); c2.append(el("h2", "", "Versamenti"));
+      if(!d.versamenti.length) c2.append(el("div", "vuoto", "Nessun versamento registrato."));
+      d.versamenti.forEach(v=>{ const r = el("div", "row"); r.append(el("span", "", data(v.d)), el("b", "", "€ " + v.eur)); c2.append(r); });
+      frag.append(c2);
+      const c3 = el("div", "card"); c3.append(el("h2", "", "Giorni in cui ha mangiato (" + d.giorni.length + ")"));
+      if(!d.giorni.length) c3.append(el("div", "vuoto", "Nessun pasto registrato."));
+      d.giorni.forEach(g=>{ const r = el("div", "row"); r.append(el("span", "", data(g)), el("span", "", "€ " + d.prezzo)); c3.append(r); });
+      frag.append(c3);
+      const ag = d.aggiornato ? new Date(d.aggiornato) : null;
+      frag.append(el("div", "foot", ag ? "Aggiornato il " + ag.toLocaleDateString("it-IT", { day:"numeric", month:"long" }) + " alle " + ag.toLocaleTimeString("it-IT", { hour:"2-digit", minute:"2-digit" }) : ""));
+      out.replaceChildren(frag);
+    }
+  }catch(e){
+    errore("Non riesco a caricare i dati: controlla la connessione e riprova.");
+  }
+}
+</script>
+</body>
+</html>

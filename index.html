@@ -99,7 +99,7 @@
   .attendee-tag{ font-size:12px; font-weight:600; background:var(--bg); padding:5px 10px; border-radius:999px; border:1px solid var(--border); display:inline-block; }
 
   .footer{ margin:22px 16px 0; display:flex; align-items:center; justify-content:space-between; }
-  .footer{ justify-content:flex-end; }
+  .footer{ justify-content:flex-end; flex-wrap:wrap; row-gap:8px; }
   .savebar{ position:fixed; left:0; right:0; bottom:0; z-index:1000; background:#fff; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
   .savebar .save-state{ font-size:12.5px; font-weight:600; color:var(--ink-soft); }
   .savebar .save-state.dirty{ color:var(--yellow-dark); }
@@ -187,6 +187,8 @@
   .sr-tag{ font-weight:700; }
   #bkOverlay{ position:fixed; inset:0; z-index:2000; background:rgba(10,25,60,.55); display:none; align-items:flex-end; }
   #bkOverlay.show{ display:flex; }
+  #lkOverlay{ position:fixed; inset:0; z-index:2000; background:rgba(10,25,60,.55); display:none; align-items:flex-end; }
+  #lkOverlay.show{ display:flex; }
   .bk-sheet{ background:var(--bg); width:100%; max-height:88vh; overflow-y:auto; border-radius:18px 18px 0 0; padding:16px 18px calc(24px + env(safe-area-inset-bottom)); }
   .bk-btn{ width:100%; padding:13px; border-radius:12px; border:none; background:var(--blue); color:#fff; font-weight:800; font-size:14px; margin:6px 0; }
   .bk-btn.sec{ background:#fff; color:var(--blue); border:1.5px solid var(--blue); }
@@ -306,6 +308,18 @@
   <div class="list" id="daysList"></div>
 </div>
 
+<div id="lkOverlay"><div class="bk-sheet">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+    <div style="font-size:19px; font-weight:800; color:var(--blue-dark);">Link genitori</div>
+    <button id="lkClose" style="background:var(--border); border:none; border-radius:999px; width:32px; height:32px; font-size:16px;">✕</button>
+  </div>
+  <div style="font-size:13px; color:var(--ink-soft); line-height:1.5;">Ogni bambino ha un link personale: il genitore lo apre dal telefono, senza password, e vede solo i pranzi e i versamenti del suo bambino (non lo Ski room). Il link si aggiorna ogni volta che premi Salva. Mandalo solo al genitore giusto.</div>
+  <button class="bk-btn" id="lkTutti">🔗 Crea i link mancanti</button>
+  <input id="lkCerca" placeholder="Cerca un bambino…" style="width:100%; padding:11px 12px; border-radius:12px; border:1px solid var(--border); font-size:14px; background:#fff; margin:4px 0 6px;">
+  <div id="lkLista"></div>
+  <div id="lkMsg" style="font-size:13px; font-weight:700; color:var(--blue-dark); margin-top:10px; min-height:18px;"></div>
+</div></div>
+
 <div id="bkOverlay"><div class="bk-sheet">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
     <div style="font-size:19px; font-weight:800; color:var(--blue-dark);">Backup dati</div>
@@ -400,6 +414,7 @@
 </div>
 
 <div class="footer">
+  <button class="reset-btn" id="lkBtn" style="margin-right:8px;">🔗 Genitori</button>
   <button class="reset-btn" id="bkBtn" style="margin-right:8px;">💾 Backup</button>
   <button class="reset-btn" id="logoutBtn" style="margin-right:8px;">⎋ Esci</button>
   <button class="reset-btn" id="resetBtn">↺ Ripristina dati originali</button>
@@ -648,6 +663,114 @@ function saveData(){
 }
 
 let savedFlashTimer = null;
+// ---------- LINK GENITORI ----------
+// ogni bambino ha un codice casuale (valido anche nelle stagioni future); la pagina genitori.html legge solo il documento con quel codice
+function lkChiave(p){ return normNome(p.cognome + " " + p.nome); }
+function lkUrl(tok){ return new URL("genitori.html", location.href).href + "?c=" + tok; }
+function lkNuovoToken(){
+  const a = new Uint8Array(16); crypto.getRandomValues(a);
+  return Array.from(a, b=>b.toString(16).padStart(2,"0")).join("");
+}
+function lkHash(t){ let h = 5381; for(let i=0;i<t.length;i++) h = ((h<<5) + h + t.charCodeAt(i)) | 0; return t.length + ":" + h; }
+function lkStagione(){ return seasons[seasons.length-1]; }
+function lkLista(){
+  appState.data[currentSeasonId] = people;
+  return (appState.data[lkStagione().id] || []).slice().sort((a,b)=>a.cognome.localeCompare(b.cognome) || a.nome.localeCompare(b.nome));
+}
+function lkToken(p, crea){
+  if(!appState.link) appState.link = {};
+  const k = lkChiave(p);
+  if(!appState.link[k] && crea){ appState.link[k] = lkNuovoToken(); saveData(); }
+  return appState.link[k] || "";
+}
+// quello che vede il genitore: solo pranzi e versamenti (niente Ski room, nemmeno nel saldo)
+function riepilogoGenitori(p, stagione){
+  const consumati = pastiConsumati(p), pagato = p.pagato || 0;
+  const saldo = pagato - consumati * PREZZO_PASTO;
+  const rim = Math.max(0, Math.floor(saldo / PREZZO_PASTO));
+  let stato;
+  if(saldo < 0) stato = { code:"PAGARE", label:"Da versare", detail:"Da versare " + (-saldo) + " €" };
+  else if(pastiPagati(p) > 0 && rim <= 1) stato = { code:"RICARICARE", label:"Da ricaricare", detail: rim<=0 ? "Ultimo pasto disponibile: serve una ricarica" : "Manca 1 pasto: serve una ricarica a breve" };
+  else if(pagato > 0) stato = { code:"OK", label:"Tutto a posto", detail: rim + (rim===1 ? " pasto rimanente" : " pasti rimanenti") };
+  else stato = { code:"OK", label:"Nessun versamento", detail:"Nessun versamento registrato" };
+  const vers = (p.versamenti||[]).slice().sort((a,b)=> a.d < b.d ? 1 : a.d > b.d ? -1 : 0).map(v=>({ d:v.d, eur:Number(v.eur)||0 }));
+  const prima = Math.max(0, pagato - vers.reduce((t,v)=>t+v.eur, 0));
+  if(prima) vers.push({ d:"", eur:prima });
+  const giorni = Object.keys(p.attendance||{}).filter(d=>p.attendance[d]===1).sort().reverse();
+  return { v:1, nome:p.cognome + " " + p.nome, stagione:stagione.label, prezzo:PREZZO_PASTO, pagato, consumati, saldo, rimanenti:rim, stato, versamenti:vers, giorni };
+}
+let lkPubInCorso = false, lkPubRichiesta = false;
+async function pubblicaGenitori(){
+  if(!window.cloudGenitori || !appState.link) return;
+  if(lkPubInCorso){ lkPubRichiesta = true; return; }
+  lkPubInCorso = true;
+  try{
+    const u = lkStagione();
+    for(const p of (appState.data[u.id] || [])){
+      const tok = appState.link[lkChiave(p)];
+      if(!tok) continue;
+      const pay = riepilogoGenitori(p, u), h = lkHash(JSON.stringify(pay));
+      let prima = null; try{ prima = localStorage.getItem("pranzi_pub_" + tok); }catch(e){}
+      if(prima===h) continue;
+      await window.cloudGenitori.pubblica(tok, Object.assign({}, pay, { aggiornato: new Date().toISOString() }));
+      try{ localStorage.setItem("pranzi_pub_" + tok, h); }catch(e){}
+    }
+  }catch(e){ console.error(e); }
+  lkPubInCorso = false;
+  if(lkPubRichiesta){ lkPubRichiesta = false; pubblicaGenitori(); }
+}
+async function copiaTesto(txt){
+  try{ await navigator.clipboard.writeText(txt); return true; }catch(e){}
+  try{
+    const ta = document.createElement("textarea"); ta.value = txt; ta.style.cssText = "position:fixed; opacity:0;";
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, txt.length);
+    const ok = document.execCommand("copy"); ta.remove(); return ok;
+  }catch(e){ return false; }
+}
+let lkVisibili = [];
+function lkMsg(t){ document.getElementById("lkMsg").textContent = t; }
+function lkRender(){
+  const q = document.getElementById("lkCerca").value.trim().toUpperCase();
+  lkVisibili = lkLista().filter(p=>!q || (p.cognome + " " + p.nome).toUpperCase().includes(q));
+  const link = appState.link || {};
+  document.getElementById("lkLista").innerHTML = lkVisibili.map((p,i)=>`<div class="bk-row"><div><div style="font-weight:700;">${p.cognome} ${p.nome}</div><div style="font-size:12px; color:var(--ink-soft);">${link[lkChiave(p)] ? "link attivo" : "nessun link"}</div></div><div style="display:flex; gap:6px;"><button class="bk-mini" data-lkc="${i}">Copia</button><button class="bk-mini" data-lkw="${i}">WhatsApp</button><button class="bk-mini" data-lkn="${i}" title="Nuovo link (il vecchio smette di funzionare)">↻</button></div></div>`).join("") || '<div style="font-size:13px; color:var(--ink-soft);">Nessun bambino trovato.</div>';
+}
+function lkApri(){ lkMsg(""); document.getElementById("lkCerca").value = ""; lkRender(); document.getElementById("lkOverlay").classList.add("show"); }
+function lkChiudi(){ document.getElementById("lkOverlay").classList.remove("show"); }
+document.getElementById("lkBtn").addEventListener("click", lkApri);
+document.getElementById("lkClose").addEventListener("click", lkChiudi);
+document.getElementById("lkOverlay").addEventListener("click", e=>{ if(e.target.id==="lkOverlay") lkChiudi(); });
+document.getElementById("lkCerca").addEventListener("input", lkRender);
+document.getElementById("lkTutti").addEventListener("click", ()=>{
+  let n = 0;
+  lkLista().forEach(p=>{ if(!lkToken(p, false)){ lkToken(p, true); n++; } });
+  lkRender();
+  lkMsg(n ? "Creati " + n + " link. Si attivano con il salvataggio." : "Tutti i bambini hanno già un link.");
+  if(n) saveNow();
+});
+document.getElementById("lkLista").addEventListener("click", async e=>{
+  const c = e.target.closest("[data-lkc]"), w = e.target.closest("[data-lkw]"), n = e.target.closest("[data-lkn]");
+  if(c || w){
+    const p = lkVisibili[Number((c||w).dataset.lkc ?? (c||w).dataset.lkw)];
+    if(!p) return;
+    const url = lkUrl(lkToken(p, true));
+    if(w) window.open("https://wa.me/?text=" + encodeURIComponent("Ciao! Qui puoi vedere i pranzi e i versamenti di " + p.nome.toLowerCase().replace(/(^|\s)\S/g, x=>x.toUpperCase()) + ": " + url), "_blank");
+    else { const ok = await copiaTesto(url); lkMsg(ok ? "Link di " + p.cognome + " " + p.nome + " copiato." : "Copia non riuscita: usa WhatsApp."); }
+    lkRender(); saveNow();
+    return;
+  }
+  if(n){
+    const p = lkVisibili[Number(n.dataset.lkn)];
+    if(!p) return;
+    if(!confirm("Creare un nuovo link per " + p.cognome + " " + p.nome + "? Il link vecchio smette di funzionare.")) return;
+    const vecchio = lkToken(p, false);
+    appState.link[lkChiave(p)] = lkNuovoToken();
+    saveData();
+    if(vecchio && window.cloudGenitori) window.cloudGenitori.elimina(vecchio).catch(()=>{});
+    lkMsg("Nuovo link creato: copialo o invialo da qui."); lkRender(); saveNow();
+  }
+});
+
 async function saveNow(){
   if(!dirty) return;
   const st = document.getElementById("saveState");
@@ -660,6 +783,7 @@ async function saveNow(){
     new Promise(res=>setTimeout(()=>res({ ok:false, error:"nessuna risposta dal server, controlla la connessione e riprova" }), 20000))
   ]);
   if(r.ok){
+    pubblicaGenitori();
     dirty = false;
     st.classList.remove("dirty");
     st.textContent = "✓ Salvato";
@@ -1772,6 +1896,7 @@ function mergeState(b, l, r){
     else if(rx){ Object.keys(x).forEach(f=>{ if(JSON.stringify(x[f])!==JSON.stringify(bx[f])) rx[f] = x[f]; }); }
   });
   bS.forEach(x=>{ if(!lS.some(y=>y.id===x.id)) out.schede = out.schede.filter(y=>y.id!==x.id); });
+  { const bl = b.link || {}, ll = l.link || {}; out.link = out.link || {}; Object.keys(ll).forEach(k=>{ if(bl[k]!==ll[k]) out.link[k] = ll[k]; }); }
   return JSON.stringify(out);
 }
 
@@ -1828,6 +1953,11 @@ window.cloudCopie = {
     const s = await getDoc(doc(db, "pranzi", id));
     return s.exists() ? s.data().stato : null;
   }
+};
+
+window.cloudGenitori = {
+  async pubblica(tok, dati){ await setDoc(doc(db, "genitori", tok), dati); },
+  async elimina(tok){ await deleteDoc(doc(db, "genitori", tok)); }
 };
 
 $("loginBtn").onclick = async ()=>{
