@@ -771,6 +771,22 @@ function toggleAttendanceDate(id, date){
   else p.attendance[date] = 1;
   saveData(); render();
 }
+function versamentiHtmlFor(p){
+  const vers = (p.versamenti||[]).slice().sort((a,b)=> a.d < b.d ? 1 : a.d > b.d ? -1 : 0);
+  const somma = vers.reduce((t,v)=>t+(Number(v.eur)||0), 0);
+  const senzaData = Math.max(0, (p.pagato||0) - somma);
+  let h = `<div class="present-days" style="margin-top:12px;"><div class="present-days-title">Versamenti · totale €${p.pagato||0} <span style="font-weight:500;">(= ${pastiPagati(p)} pasti a ${PREZZO_PASTO}€)</span></div>`;
+  h += `<div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0;">
+      <span style="font-weight:700;">€</span>
+      <input type="number" inputmode="decimal" id="vImp-${p.id}" value="130" style="width:78px; padding:8px; border:1px solid var(--border); border-radius:10px; font-size:14px;">
+      <input type="date" id="vData-${p.id}" value="${todayISO(0)}" style="flex:1; min-width:130px; padding:8px; border:1px solid var(--border); border-radius:10px; font-size:14px;">
+      <button class="quick-day-btn" data-vadd="${p.id}">＋ Aggiungi</button>
+    </div>`;
+  if(!vers.length && !senzaData) h += `<div class="no-days">Nessun versamento registrato.</div>`;
+  h += vers.map(v=>`<div class="present-day-row"><span class="lbl">${fmtFull(v.d)} · €${v.eur}</span><button class="rm" data-vrm="${p.id}|${v.id}" title="Elimina versamento">✕</button></div>`).join("");
+  if(senzaData) h += `<div class="present-day-row"><span class="lbl">Versato prima (senza data)</span><span style="display:flex; align-items:center; gap:4px;">€<input type="number" inputmode="decimal" value="${senzaData}" data-vleg="${p.id}" style="width:72px; padding:6px; border:1px solid var(--border); border-radius:8px; font-size:14px;"></span></div>`;
+  return h + `</div>`;
+}
 function updatePagato(id, val){
   const p = people.find(p=>p.id===id);
   p.pagato = Math.max(0, Number(val)||0);
@@ -908,11 +924,7 @@ function renderPeopleList(){
         </button>
         <div class="card-body ${isOpen?"open":""}">
           <div class="status-banner ${st.code}">${st.detail}</div>
-          <div class="row-inline">
-            <span>Pagato €</span>
-            <input type="number" value="${p.pagato}" data-pagato="${p.id}">
-            <span style="font-size:11px;">(= ${pastiPagati(p)} pasti a ${PREZZO_PASTO}€)</span>
-          </div>
+          ${versamentiHtmlFor(p)}
           <button class="delete-btn ${deletePendingId===p.id?"confirm":""}" data-delete="${p.id}">${deletePendingId===p.id ? "⚠️ Tocca di nuovo per confermare" : "🗑 Cancella persona"}</button>
           ${presentDaysHtml}
           ${skiHtmlFor(p)}
@@ -931,6 +943,34 @@ function renderPeopleList(){
     const p = people.find(x=>x.id===Number(pid));
     if(!p) return;
     p.skiLog = (p.skiLog||[]).filter(x=>x.id!==eid);
+    saveData(); render();
+  }));
+  container.querySelectorAll("[data-vadd]").forEach(b=>b.addEventListener("click", ()=>{
+    const id = Number(b.dataset.vadd), p = people.find(x=>x.id===id);
+    if(!p) return;
+    const eur = Number(String(document.getElementById("vImp-" + id).value).replace(",", "."));
+    const d = document.getElementById("vData-" + id).value || todayISO(0);
+    if(!(eur>0)){ alert("Scrivi un importo valido."); return; }
+    if(!p.versamenti) p.versamenti = [];
+    p.versamenti.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), d, eur });
+    p.pagato = (p.pagato||0) + eur;
+    saveData(); render();
+  }));
+  container.querySelectorAll("[data-vrm]").forEach(b=>b.addEventListener("click", ()=>{
+    const [pid, vid] = b.dataset.vrm.split("|");
+    const p = people.find(x=>x.id===Number(pid));
+    const v = p && (p.versamenti||[]).find(x=>x.id===vid);
+    if(!v) return;
+    if(!confirm("Eliminare il versamento di €" + v.eur + " del " + fmtFull(v.d) + "?")) return;
+    p.versamenti = p.versamenti.filter(x=>x.id!==vid);
+    p.pagato = Math.max(0, (p.pagato||0) - (Number(v.eur)||0));
+    saveData(); render();
+  }));
+  container.querySelectorAll("[data-vleg]").forEach(inp=>inp.addEventListener("change", ()=>{
+    const p = people.find(x=>x.id===Number(inp.dataset.vleg));
+    if(!p) return;
+    const somma = (p.versamenti||[]).reduce((t,v)=>t+(Number(v.eur)||0), 0);
+    p.pagato = somma + Math.max(0, Number(String(inp.value).replace(",", "."))||0);
     saveData(); render();
   }));
   container.querySelectorAll("[data-pagato]").forEach(inp=>inp.addEventListener("change", ()=>{
@@ -1700,6 +1740,16 @@ function mergeState(b, l, r){
         const bv = bp.attendance[d]===1, lv = lp.attendance[d]===1;
         if(bv!==lv){ if(lv) rp.attendance[d] = 1; else delete rp.attendance[d]; }
       });
+      { const bv = bp.versamenti||[], lv = lp.versamenti||[];
+        if(lv.length || bv.length){
+          rp.versamenti = rp.versamenti||[];
+          lv.forEach(x=>{
+            const bx = bv.find(y=>y.id===x.id), rx = rp.versamenti.find(y=>y.id===x.id);
+            if(!bx){ if(!rx) rp.versamenti.push(x); }
+            else if(rx && JSON.stringify(x)!==JSON.stringify(bx)) Object.assign(rx, x);
+          });
+          bv.forEach(x=>{ if(!lv.some(y=>y.id===x.id)) rp.versamenti = rp.versamenti.filter(y=>y.id!==x.id); });
+        } }
       rp.pagato = Math.max(0, (rp.pagato||0) + ((lp.pagato||0) - (bp.pagato||0)));
       { const bl = bp.skiLog||[], ll = lp.skiLog||[];
         if(ll.length || bl.length){
