@@ -185,6 +185,7 @@
   .sr-btns button{ flex:1; padding:11px 4px; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:700; font-size:12.5px; line-height:1.2; }
   .sr-btns button:disabled{ opacity:.35; }
   .sr-tag{ font-weight:700; }
+  .rb-act{ width:42px; height:42px; flex-shrink:0; border-radius:12px; border:1px solid var(--border); background:#fff; font-size:18px; margin-right:8px; }
   #bkOverlay{ position:fixed; inset:0; z-index:2000; background:rgba(10,25,60,.55); display:none; align-items:flex-end; }
   #bkOverlay.show{ display:flex; }
   #lkOverlay{ position:fixed; inset:0; z-index:2000; background:rgba(10,25,60,.55); display:none; align-items:flex-end; }
@@ -254,6 +255,7 @@
   <button id="tabGiorni">📅 Giorni</button>
   <button id="tabSci">📋 Schede</button>
   <button id="tabSkiroom">🎿 Ski room</button>
+  <button id="tabRubrica">📇 Rubrica</button>
 </div>
 
 <!-- REGISTRA -->
@@ -361,6 +363,34 @@
     </div>
   </div>
   <div class="list" id="skList"></div>
+</div>
+
+<!-- RUBRICA -->
+<div id="rubricaView" style="display:none;">
+  <div class="hint" style="margin-top:14px;" id="rbCount"></div>
+  <div class="searchbox">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input id="rbSearch" placeholder="Cerca nome, telefono o bambino…">
+  </div>
+  <div class="sr-chips" id="rbRuoli" style="margin:10px 16px 0;">
+    <button class="sr-chip" data-r="genitore" style="font-size:12px; padding:9px 2px; white-space:nowrap;">Genitori</button>
+    <button class="sr-chip" data-r="staff" style="font-size:12px; padding:9px 2px; white-space:nowrap;">Staff</button>
+    <button class="sr-chip" data-r="altro" style="font-size:12px; padding:9px 2px; white-space:nowrap;">Altro</button>
+  </div>
+  <div class="add-bar">
+    <button class="add-toggle" id="rbAddToggle">+ Nuovo contatto</button>
+    <div class="add-form" id="rbAddForm">
+      <input id="rbAddNome" placeholder="Nome e cognome">
+      <input id="rbAddTel" inputmode="tel" placeholder="Telefono">
+      <select id="rbAddRuolo" style="width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border); font-size:15px; background:#fff; margin-top:8px;">
+        <option value="genitore">Genitore</option><option value="staff">Staff</option><option value="altro">Altro</option>
+      </select>
+      <select id="rbAddBambino" style="width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border); font-size:15px; background:#fff; margin-top:8px;"></select>
+      <div class="form-error" id="rbAddError">Inserisci almeno il nome.</div>
+      <button class="save" id="rbAddSave">Salva contatto</button>
+    </div>
+  </div>
+  <div class="list" id="rbList"></div>
 </div>
 
 <!-- SKI ROOM -->
@@ -1237,17 +1267,18 @@ function renderSeasonChips(){
 function render(){
   renderSeasonChips();
   computeSummary();
-  ["registra","persone","giorni","attrezzatura","skiroom"].forEach(v=>{ document.getElementById(v+"View").style.display = currentView===v ? "block" : "none"; });
+  ["registra","persone","giorni","attrezzatura","skiroom","rubrica"].forEach(v=>{ document.getElementById(v+"View").style.display = currentView===v ? "block" : "none"; });
   if(currentView==="registra") renderRegisterList();
   else if(currentView==="persone"){ renderChips(); renderPeopleList(); }
   else if(currentView==="giorni") renderDaysList();
   else if(currentView==="attrezzatura") renderSchede();
+  else if(currentView==="rubrica") renderRubrica();
   else renderSkiroom();
 }
 
 function setTab(tab){
   currentView = tab;
-  [["tabRegistra","registra"],["tabPersone","persone"],["tabGiorni","giorni"],["tabSci","attrezzatura"],["tabSkiroom","skiroom"]].forEach(([id,v])=> document.getElementById(id).classList.toggle("active", tab===v));
+  [["tabRegistra","registra"],["tabPersone","persone"],["tabGiorni","giorni"],["tabSci","attrezzatura"],["tabSkiroom","skiroom"],["tabRubrica","rubrica"]].forEach(([id,v])=> document.getElementById(id).classList.toggle("active", tab===v));
   render();
 }
 document.getElementById("tabRegistra").addEventListener("click", ()=>setTab("registra"));
@@ -1764,6 +1795,111 @@ document.getElementById("bkFile").addEventListener("change", e=>bkLeggiFile(e.ta
 document.getElementById("bkRipBtn").addEventListener("click", bkRipristina);
 bkAggiornaBottone();
 
+// ---------- RUBRICA CONDIVISA ----------
+let rbSearch = "", rbOpen = null, rbDelPending = null, rbDelTimer = null, rbRuoli = new Set();
+const RB_RUOLI = { genitore:"Genitore", staff:"Staff", altro:"Altro" };
+function rubrica(){ if(!appState.rubrica) appState.rubrica = []; return appState.rubrica; }
+function rbNomiBambini(){
+  appState.data[currentSeasonId] = people;
+  const u = seasons[seasons.length-1];
+  return (appState.data[u.id] || []).map(p=>p.cognome + " " + p.nome).sort((a,b)=>a.localeCompare(b));
+}
+function rbOpzioniBambino(sel){
+  const nomi = rbNomiBambini();
+  if(sel && !nomi.includes(sel)) nomi.push(sel);
+  return '<option value="">Nessun bambino collegato</option>' + nomi.map(n=>`<option value="${skEsc(n)}" ${n===sel?"selected":""}>${skEsc(n)}</option>`).join("");
+}
+// numero per WhatsApp: senza + e con il prefisso internazionale (se manca, 39 = Italia)
+function rbNumeroWa(t){
+  const n = String(t||"").replace(/[^\d+]/g, "");
+  if(n.startsWith("+")) return n.slice(1);
+  if(n.startsWith("00")) return n.slice(2);
+  return "39" + n;
+}
+function renderRubrica(){
+  const q = rbSearch.trim().toUpperCase();
+  const tutti = rubrica();
+  const lista = tutti.filter(c=>(!rbRuoli.size || rbRuoli.has(c.ruolo)) && (!q || ((c.nome||"") + " " + (c.tel||"") + " " + (c.bambino||"")).toUpperCase().includes(q)))
+    .sort((a,b)=>(a.nome||"").localeCompare(b.nome||""));
+  document.querySelectorAll("#rbRuoli .sr-chip").forEach(c=>{
+    c.classList.toggle("on", rbRuoli.has(c.dataset.r));
+    c.textContent = { genitore:"Genitori", staff:"Staff", altro:"Altro" }[c.dataset.r] + " (" + tutti.filter(x=>x.ruolo===c.dataset.r).length + ")";
+  });
+  document.getElementById("rbCount").textContent = (lista.length===tutti.length ? tutti.length : lista.length + " di " + tutti.length) + (tutti.length===1 ? " contatto" : " contatti");
+  const el = document.getElementById("rbList");
+  if(!lista.length){ el.innerHTML = '<div class="empty">' + (tutti.length ? "Nessun contatto trovato." : "Nessun contatto: tocca “+ Nuovo contatto”.") + '</div>'; return; }
+  el.innerHTML = lista.map(c=>{
+    const open = rbOpen===c.id;
+    let body = "";
+    if(open){
+      body = '<div class="sk-body">'
+        + `<label class="sk-lbl">Nome</label><input class="sk-in" data-rb="${c.id}" data-f="nome" value="${skEsc(c.nome)}">`
+        + `<label class="sk-lbl">Telefono</label><input class="sk-in" inputmode="tel" data-rb="${c.id}" data-f="tel" value="${skEsc(c.tel)}">`
+        + `<label class="sk-lbl">Ruolo</label><select class="sk-in" data-rb="${c.id}" data-f="ruolo">${Object.keys(RB_RUOLI).map(r=>`<option value="${r}" ${c.ruolo===r?"selected":""}>${RB_RUOLI[r]}</option>`).join("")}</select>`
+        + `<label class="sk-lbl">Bambino collegato</label><select class="sk-in" data-rb="${c.id}" data-f="bambino">${rbOpzioniBambino(c.bambino)}</select>`
+        + `<label class="sk-lbl">Note</label><input class="sk-in" data-rb="${c.id}" data-f="note" value="${skEsc(c.note)}">`
+        + `<button class="reset-btn sk-del" data-rbdel="${c.id}">${rbDelPending===c.id ? "Tocca di nuovo per eliminare" : "🗑 Elimina contatto"}</button></div>`;
+    }
+    const sub = [RB_RUOLI[c.ruolo] || "", c.bambino ? "di " + c.bambino : "", c.tel || ""].filter(Boolean).join(" · ");
+    const azioni = c.tel ? `<button class="rb-act" data-rbcall="${c.id}" title="Chiama">📞</button><button class="rb-act" data-rbwa="${c.id}" title="WhatsApp">💬</button>` : "";
+    return `<div class="sk-card"><div style="display:flex; align-items:center;"><button class="sk-head" data-rbopen="${c.id}" style="flex:1; min-width:0;"><div><div class="sk-name">${skEsc(c.nome)}</div><div class="sk-sub">${skEsc(sub)}</div></div><span>${open?"⌃":"⌄"}</span></button>${azioni}</div>${body}</div>`;
+  }).join("");
+}
+document.getElementById("rbList").addEventListener("click", e=>{
+  const call = e.target.closest("[data-rbcall]"), wa = e.target.closest("[data-rbwa]");
+  if(call || wa){
+    const c = rubrica().find(x=>x.id===(call||wa).dataset[call ? "rbcall" : "rbwa"]);
+    if(!c) return;
+    if(call) location.href = "tel:" + String(c.tel).replace(/[^\d+]/g, "");
+    else window.open("https://wa.me/" + rbNumeroWa(c.tel), "_blank");
+    return;
+  }
+  const del = e.target.closest("[data-rbdel]");
+  if(del){
+    const id = del.dataset.rbdel;
+    if(rbDelPending===id){
+      clearTimeout(rbDelTimer); rbDelPending = null; rbOpen = null;
+      appState.rubrica = rubrica().filter(x=>x.id!==id);
+      saveData(); renderRubrica();
+    } else {
+      rbDelPending = id; renderRubrica();
+      clearTimeout(rbDelTimer); rbDelTimer = setTimeout(()=>{ rbDelPending = null; renderRubrica(); }, 3500);
+    }
+    return;
+  }
+  const op = e.target.closest("[data-rbopen]");
+  if(op){ rbOpen = rbOpen===op.dataset.rbopen ? null : op.dataset.rbopen; rbDelPending = null; renderRubrica(); }
+});
+function rbAggiorna(t){
+  const c = rubrica().find(x=>x.id===t.dataset.rb);
+  if(c){ c[t.dataset.f] = t.value.trim(); saveData(); }
+  return c;
+}
+document.getElementById("rbList").addEventListener("input", e=>{ if(e.target.matches("input.sk-in[data-rb]")) rbAggiorna(e.target); });
+document.getElementById("rbList").addEventListener("change", e=>{ if(e.target.matches("select.sk-in[data-rb]")){ rbAggiorna(e.target); renderRubrica(); } });
+document.getElementById("rbSearch").addEventListener("input", e=>{ rbSearch = e.target.value; renderRubrica(); });
+document.getElementById("rbRuoli").addEventListener("click", e=>{
+  const c = e.target.closest(".sr-chip"); if(!c) return;
+  if(rbRuoli.has(c.dataset.r)) rbRuoli.delete(c.dataset.r); else rbRuoli.add(c.dataset.r);
+  renderRubrica();
+});
+document.getElementById("rbAddToggle").addEventListener("click", ()=>{
+  document.getElementById("rbAddBambino").innerHTML = rbOpzioniBambino("");
+  document.getElementById("rbAddForm").classList.toggle("open");
+});
+document.getElementById("rbAddSave").addEventListener("click", ()=>{
+  const nome = document.getElementById("rbAddNome").value.trim(), err = document.getElementById("rbAddError");
+  if(!nome){ err.classList.add("show"); return; }
+  err.classList.remove("show");
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  rubrica().push({ id, nome, tel: document.getElementById("rbAddTel").value.trim(), ruolo: document.getElementById("rbAddRuolo").value, bambino: document.getElementById("rbAddBambino").value, note: "" });
+  ["rbAddNome","rbAddTel"].forEach(i=>{ document.getElementById(i).value = ""; });
+  document.getElementById("rbAddForm").classList.remove("open");
+  rbSearch = ""; document.getElementById("rbSearch").value = "";
+  rbOpen = id; saveData(); renderRubrica();
+});
+document.getElementById("tabRubrica").addEventListener("click", ()=>setTab("rubrica"));
+
 document.getElementById("registerDate").addEventListener("change", (e)=>{
   registerDate = e.target.value || todayISO(0);
   renderRegisterList();
@@ -1896,6 +2032,13 @@ function mergeState(b, l, r){
     else if(rx){ Object.keys(x).forEach(f=>{ if(JSON.stringify(x[f])!==JSON.stringify(bx[f])) rx[f] = x[f]; }); }
   });
   bS.forEach(x=>{ if(!lS.some(y=>y.id===x.id)) out.schede = out.schede.filter(y=>y.id!==x.id); });
+  { const bR = b.rubrica || [], lR = l.rubrica || []; out.rubrica = out.rubrica || [];
+    lR.forEach(x=>{
+      const bx = bR.find(y=>y.id===x.id), rx = out.rubrica.find(y=>y.id===x.id);
+      if(!bx){ if(!rx) out.rubrica.push(x); }
+      else if(rx){ Object.keys(x).forEach(f=>{ if(JSON.stringify(x[f])!==JSON.stringify(bx[f])) rx[f] = x[f]; }); }
+    });
+    bR.forEach(x=>{ if(!lR.some(y=>y.id===x.id)) out.rubrica = out.rubrica.filter(y=>y.id!==x.id); }); }
   { const bl = b.link || {}, ll = l.link || {}; out.link = out.link || {}; Object.keys(ll).forEach(k=>{ if(bl[k]!==ll[k]) out.link[k] = ll[k]; }); }
   return JSON.stringify(out);
 }
