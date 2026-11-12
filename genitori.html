@@ -28,6 +28,13 @@
   .row{ display:flex; justify-content:space-between; gap:8px; padding:9px 0; border-top:1px solid var(--border); font-size:14.5px; }
   .row:first-of-type{ border-top:none; }
   .vuoto{ color:var(--soft); font-size:14px; }
+  .next{ background:var(--blue); color:#fff; border-radius:16px; padding:14px 16px; margin-bottom:12px; }
+  .next small{ display:block; font-size:11.5px; font-weight:800; letter-spacing:.08em; opacity:.85; }
+  .next b{ display:block; font-size:19px; margin-top:2px; }
+  .mese{ margin:14px 0 4px; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--soft); }
+  .gara.passata{ opacity:.5; }
+  .gara .t{ font-weight:700; } .gara .q{ color:var(--soft); font-size:13px; margin-top:1px; }
+  .btn{ display:block; text-align:center; text-decoration:none; background:#fff; color:var(--blue); border:1.5px solid var(--blue); border-radius:12px; padding:11px; font-weight:800; font-size:14px; margin-top:12px; }
   .foot{ text-align:center; color:var(--soft); font-size:12px; margin:14px 0 24px; }
 </style>
 </head>
@@ -60,7 +67,10 @@ if(!token || !/^[A-Za-z0-9]{16,64}$/.test(token)){
 } else {
   try{
     const db = getFirestore(initializeApp(firebaseConfig));
-    const snap = await getDoc(doc(db, "genitori", token));
+    const [snap, snapGare] = await Promise.all([
+      getDoc(doc(db, "genitori", token)),
+      getDoc(doc(db, "genitori", "calendario-gare")).catch(()=>null)
+    ]);
     if(!snap.exists()){ errore("Questo link non è ancora attivo o non è più valido. Chiedi un nuovo link a chi gestisce i pranzi."); }
     else{
       const d = snap.data();
@@ -80,6 +90,32 @@ if(!token || !/^[A-Za-z0-9]{16,64}$/.test(token)){
       if(!d.giorni.length) c3.append(el("div", "vuoto", "Nessun pasto registrato."));
       d.giorni.forEach(g=>{ const r = el("div", "row"); r.append(el("span", "", data(g)), el("span", "", "€ " + d.prezzo)); c3.append(r); });
       frag.append(c3);
+      if(snapGare && snapGare.exists() && (snapGare.data().gare || []).length){
+        const cal = snapGare.data(), oggi = new Date(); oggi.setHours(0,0,0,0);
+        const dt = s => new Date(s + "T00:00:00");
+        const fine = x => x.a || x.d;
+        const futuro = x => dt(fine(x)) >= oggi;
+        const breve = (x, conAnno) => dt(x).toLocaleDateString("it-IT", { weekday:"short", day:"numeric", month:"short" }) + (conAnno ? " " + dt(x).getFullYear() : "");
+        const quando = x => (!x.a || x.a===x.d) ? breve(x.d) : breve(x.d) + " – " + breve(x.a);
+        const prossima = cal.gare.find(x=>x.tipo==="gara" && futuro(x));
+        if(prossima){
+          const gg = Math.round((dt(prossima.d) - oggi) / 86400000);
+          const n = el("div", "next"); n.append(el("small", "", "PROSSIMA GARA"), el("b", "", prossima.titolo), el("span", "", quando(prossima) + " · " + (gg<=0 ? "in corso" : gg===1 ? "domani" : "tra " + gg + " giorni")));
+          frag.append(n);
+        }
+        const c4 = el("div", "card"); c4.append(el("h2", "", "Calendario gare"));
+        let mese = "";
+        const MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+        cal.gare.forEach(x=>{
+          const m = x.d.slice(0,7);
+          if(m!==mese){ mese = m; c4.append(el("div", "mese", MESI[Number(m.slice(5,7))-1] + " " + m.slice(0,4))); }
+          const r = el("div", "row gara" + (futuro(x) ? "" : " passata")); const w = el("div");
+          w.append(el("div", "t", x.titolo), el("div", "q", quando(x) + (x.tipo==="festa" ? " · festività" : "") + (x.note ? " · " + x.note : "")));
+          r.append(w); c4.append(r);
+        });
+        if(cal.pdf){ const a = el("a", "btn", "📄 Apri il calendario ufficiale (PDF)"); a.href = cal.pdf; a.target = "_blank"; c4.append(a); }
+        frag.append(c4);
+      }
       const ag = d.aggiornato ? new Date(d.aggiornato) : null;
       frag.append(el("div", "foot", ag ? "Aggiornato il " + ag.toLocaleDateString("it-IT", { day:"numeric", month:"long" }) + " alle " + ag.toLocaleTimeString("it-IT", { hour:"2-digit", minute:"2-digit" }) : ""));
       out.replaceChildren(frag);

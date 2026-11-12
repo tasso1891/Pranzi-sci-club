@@ -43,7 +43,7 @@
   .stat .lbl{ font-size:10.5px; color:var(--yellow-soft); margin-top:2px;}
 
   .segmented{ display:flex; flex-wrap:wrap; gap:6px; margin:14px 16px 0; background:#fff; border-radius:12px; padding:4px; border:1px solid var(--border); }
-  .segmented button{ flex:1 0 auto; white-space:nowrap; display:flex; align-items:center; justify-content:center; gap:5px; padding:9px 12px; border-radius:9px; border:none; background:transparent; color:var(--ink-soft); font-weight:700; font-size:12.5px; }
+  .segmented button{ flex:1 0 auto; white-space:nowrap; display:flex; align-items:center; justify-content:center; gap:5px; padding:9px 7px; border-radius:9px; border:none; background:transparent; color:var(--ink-soft); font-weight:700; font-size:12.5px; }
   .segmented button.active{ background:var(--blue); color:#fff; }
 
   .searchbox{ margin:14px 16px 0; position:relative; }
@@ -185,6 +185,9 @@
   .sr-btns button{ flex:1; padding:11px 4px; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:700; font-size:12.5px; line-height:1.2; }
   .sr-btns button:disabled{ opacity:.35; }
   .sr-tag{ font-weight:700; }
+  .ga-pass{ opacity:.55; }
+  .ga-next{ background:var(--blue); color:#fff; border-radius:16px; padding:14px 16px; margin:12px 16px 0; }
+  .ga-mese{ margin:16px 4px 6px; font-size:12px; font-weight:800; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em; }
   .rb-act{ width:42px; height:42px; flex-shrink:0; border-radius:12px; border:1px solid var(--border); background:#fff; font-size:18px; margin-right:8px; }
   #bkOverlay{ position:fixed; inset:0; z-index:2000; background:rgba(10,25,60,.55); display:none; align-items:flex-end; }
   #bkOverlay.show{ display:flex; }
@@ -256,6 +259,7 @@
   <button id="tabSci">📋 Schede</button>
   <button id="tabSkiroom">🎿 Ski room</button>
   <button id="tabRubrica">📇 Rubrica</button>
+  <button id="tabGare">🏁 Gare</button>
 </div>
 
 <!-- REGISTRA -->
@@ -363,6 +367,29 @@
     </div>
   </div>
   <div class="list" id="skList"></div>
+</div>
+
+<!-- GARE -->
+<div id="gareView" style="display:none;">
+  <div id="gaProssima"></div>
+  <div style="display:flex; gap:8px; margin:12px 16px 0;">
+    <a class="quick-day-btn" href="calendario-gare.pdf" target="_blank" style="text-decoration:none; text-align:center; flex:1;">📄 Calendario PDF</a>
+    <button class="quick-day-btn" id="gaPassBtn" style="flex:1;"></button>
+  </div>
+  <div class="add-bar">
+    <button class="add-toggle" id="gaAddToggle">+ Nuova gara</button>
+    <div class="add-form" id="gaAddForm">
+      <input id="gaAddTitolo" placeholder="Nome della gara">
+      <label class="sk-lbl">Data</label><input type="date" id="gaAddData" class="sk-in">
+      <label class="sk-lbl">Fine (se dura più giorni)</label><input type="date" id="gaAddFine" class="sk-in">
+      <select id="gaAddTipo" style="width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border); font-size:15px; background:#fff; margin-top:8px;">
+        <option value="gara">Gara</option><option value="festa">Festività / altro</option>
+      </select>
+      <div class="form-error" id="gaAddError">Inserisci il nome e la data.</div>
+      <button class="save" id="gaAddSave">Salva</button>
+    </div>
+  </div>
+  <div class="list" id="gaList"></div>
 </div>
 
 <!-- RUBRICA -->
@@ -814,6 +841,7 @@ async function saveNow(){
   ]);
   if(r.ok){
     pubblicaGenitori();
+    pubblicaGare();
     dirty = false;
     st.classList.remove("dirty");
     st.textContent = "✓ Salvato";
@@ -1267,18 +1295,19 @@ function renderSeasonChips(){
 function render(){
   renderSeasonChips();
   computeSummary();
-  ["registra","persone","giorni","attrezzatura","skiroom","rubrica"].forEach(v=>{ document.getElementById(v+"View").style.display = currentView===v ? "block" : "none"; });
+  ["registra","persone","giorni","attrezzatura","skiroom","rubrica","gare"].forEach(v=>{ document.getElementById(v+"View").style.display = currentView===v ? "block" : "none"; });
   if(currentView==="registra") renderRegisterList();
   else if(currentView==="persone"){ renderChips(); renderPeopleList(); }
   else if(currentView==="giorni") renderDaysList();
   else if(currentView==="attrezzatura") renderSchede();
   else if(currentView==="rubrica") renderRubrica();
+  else if(currentView==="gare") renderGare();
   else renderSkiroom();
 }
 
 function setTab(tab){
   currentView = tab;
-  [["tabRegistra","registra"],["tabPersone","persone"],["tabGiorni","giorni"],["tabSci","attrezzatura"],["tabSkiroom","skiroom"],["tabRubrica","rubrica"]].forEach(([id,v])=> document.getElementById(id).classList.toggle("active", tab===v));
+  [["tabRegistra","registra"],["tabPersone","persone"],["tabGiorni","giorni"],["tabSci","attrezzatura"],["tabSkiroom","skiroom"],["tabRubrica","rubrica"],["tabGare","gare"]].forEach(([id,v])=> document.getElementById(id).classList.toggle("active", tab===v));
   render();
 }
 document.getElementById("tabRegistra").addEventListener("click", ()=>setTab("registra"));
@@ -1900,6 +1929,134 @@ document.getElementById("rbAddSave").addEventListener("click", ()=>{
 });
 document.getElementById("tabRubrica").addEventListener("click", ()=>setTab("rubrica"));
 
+// ---------- GARE (calendario Pulcini 2026/2027, dal PDF) ----------
+const GARE_2627 = [
+  ["g01","2026-12-18","2026-12-20","International Ski Games – Prato Nevoso","gara"],
+  ["g02","2027-01-06","","SL Prato Nevoso","gara"],
+  ["g03","2027-01-10","","Flipper Pontechianale","gara"],
+  ["g04","2027-01-17","","GS Limone Ski College","gara"],
+  ["g05","2027-01-31","","GS Artesina","gara"],
+  ["g06","2027-02-07","","SL Limone Equipe","gara"],
+  ["g07","2027-02-07","","Carnevale","festa"],
+  ["g08","2027-02-09","","Martedì grasso","festa"],
+  ["g09","2027-02-12","","Bielmonte Pinocchio – Cuccioli","gara"],
+  ["g10","2027-02-13","","Bielmonte Pinocchio – Baby","gara"],
+  ["g11","2027-02-21","","Gimkana Frabosa","gara"],
+  ["g12","2027-02-27","","Artesina Criterium","gara"],
+  ["g13","2027-02-28","","Prato Criterium","gara"],
+  ["g14","2027-03-06","2027-03-07","Pinocchio Naz. Gran GS","gara"],
+  ["g15","2027-03-07","","Tr. Commercianti Frabosa","gara"],
+  ["g16","2027-03-13","","Selezione regionale","gara"],
+  ["g17","2027-03-14","","Giovanissimi Limone","gara"],
+  ["g18","2027-03-18","2027-03-21","Criterium Naz. Zoncolan","gara"],
+  ["g19","2027-03-26","2027-03-27","Uovo d'Oro","gara"],
+  ["g20","2027-03-28","","Pasqua","festa"],
+  ["g21","2027-04-05","2027-04-08","Giovanissimi Naz. Pila","gara"]
+];
+const GA_MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+let gaOpen = null, gaDelPending = null, gaDelTimer = null, gaPassate = false;
+function gare(){
+  if(!appState.gare) appState.gare = GARE_2627.map(([id,d,a,titolo,tipo])=>({ id, d, a, titolo, tipo, note:"" }));
+  return appState.gare;
+}
+function gaFine(g){ return g.a || g.d; }
+function gaQuando(g){
+  if(!g.a || g.a===g.d) return fmtFull(g.d);
+  const d1 = parseDate(g.d), d2 = parseDate(g.a);
+  const m1 = d1.getMonth()!==d2.getMonth() || d1.getFullYear()!==d2.getFullYear();
+  return DAYS_IT[d1.getDay()] + " " + d1.getDate() + (m1 ? " " + MONTHS_IT[d1.getMonth()] : "") + " – " + DAYS_IT[d2.getDay()] + " " + d2.getDate() + " " + MONTHS_IT[d2.getMonth()] + " " + d2.getFullYear();
+}
+function gaGiorni(iso){ return Math.round((new Date(iso + "T00:00:00") - new Date(todayISO(0) + "T00:00:00")) / 86400000); }
+function gaOrdinate(){ return gare().slice().sort((a,b)=> a.d < b.d ? -1 : a.d > b.d ? 1 : a.titolo.localeCompare(b.titolo)); }
+function renderGare(){
+  const oggi = todayISO(0);
+  const tutte = gaOrdinate();
+  const passate = tutte.filter(g=>gaFine(g) < oggi), future = tutte.filter(g=>gaFine(g) >= oggi);
+  const pr = future.find(g=>g.tipo==="gara");
+  let h = "";
+  if(pr){
+    const gg = gaGiorni(pr.d), inCorso = gg <= 0;
+    h = `<div class="ga-next"><div style="font-size:11.5px; font-weight:800; letter-spacing:.08em; opacity:.85;">PROSSIMA GARA</div><div style="font-size:20px; font-weight:800; margin-top:2px;">${skEsc(pr.titolo)}</div><div style="margin-top:2px; font-size:14px;">${gaQuando(pr)} · ${inCorso ? "in corso" : gg===1 ? "domani" : "tra " + gg + " giorni"}</div></div>`;
+  }
+  document.getElementById("gaProssima").innerHTML = h;
+  const pb = document.getElementById("gaPassBtn");
+  pb.style.display = passate.length ? "" : "none";
+  pb.textContent = gaPassate ? "Nascondi le passate" : "Mostra passate (" + passate.length + ")";
+  const visibili = gaPassate ? tutte : future;
+  const el = document.getElementById("gaList");
+  if(!visibili.length){ el.innerHTML = '<div class="empty">' + (tutte.length ? "Nessuna gara in programma." : "Nessuna gara: tocca “+ Nuova gara”.") + '</div>'; return; }
+  let mese = "";
+  el.innerHTML = visibili.map(g=>{
+    const m = g.d.slice(0,7);
+    let intest = "";
+    if(m!==mese){ mese = m; intest = `<div class="ga-mese">${GA_MESI[Number(m.slice(5,7))-1]} ${m.slice(0,4)}</div>`; }
+    const open = gaOpen===g.id;
+    let body = "";
+    if(open){
+      body = '<div class="sk-body">'
+        + `<label class="sk-lbl">Nome</label><input class="sk-in" data-ga="${g.id}" data-f="titolo" value="${skEsc(g.titolo)}">`
+        + `<label class="sk-lbl">Data</label><input type="date" class="sk-in" data-ga="${g.id}" data-f="d" value="${g.d}">`
+        + `<label class="sk-lbl">Fine (se dura più giorni)</label><input type="date" class="sk-in" data-ga="${g.id}" data-f="a" value="${g.a||""}">`
+        + `<label class="sk-lbl">Tipo</label><select class="sk-in" data-ga="${g.id}" data-f="tipo"><option value="gara" ${g.tipo==="gara"?"selected":""}>Gara</option><option value="festa" ${g.tipo==="festa"?"selected":""}>Festività / altro</option></select>`
+        + `<label class="sk-lbl">Note</label><input class="sk-in" data-ga="${g.id}" data-f="note" value="${skEsc(g.note)}">`
+        + `<button class="reset-btn sk-del" data-gadel="${g.id}">${gaDelPending===g.id ? "Tocca di nuovo per eliminare" : "🗑 Elimina"}</button></div>`;
+    }
+    const sub = gaQuando(g) + (g.tipo==="festa" ? " · festività" : "") + (g.note ? " · " + g.note : "");
+    return intest + `<div class="sk-card ${gaFine(g) < oggi ? "ga-pass" : ""}"><button class="sk-head" data-gaopen="${g.id}"><div><div class="sk-name">${skEsc(g.titolo)}</div><div class="sk-sub">${skEsc(sub)}</div></div><span>${open?"⌃":"⌄"}</span></button>${body}</div>`;
+  }).join("");
+}
+document.getElementById("gaList").addEventListener("click", e=>{
+  const del = e.target.closest("[data-gadel]");
+  if(del){
+    const id = del.dataset.gadel;
+    if(gaDelPending===id){
+      clearTimeout(gaDelTimer); gaDelPending = null; gaOpen = null;
+      appState.gare = gare().filter(x=>x.id!==id);
+      saveData(); renderGare();
+    } else {
+      gaDelPending = id; renderGare();
+      clearTimeout(gaDelTimer); gaDelTimer = setTimeout(()=>{ gaDelPending = null; renderGare(); }, 3500);
+    }
+    return;
+  }
+  const op = e.target.closest("[data-gaopen]");
+  if(op){ gaOpen = gaOpen===op.dataset.gaopen ? null : op.dataset.gaopen; gaDelPending = null; renderGare(); }
+});
+function gaAggiorna(t){
+  const g = gare().find(x=>x.id===t.dataset.ga);
+  if(g){ g[t.dataset.f] = t.value.trim(); saveData(); }
+}
+document.getElementById("gaList").addEventListener("input", e=>{ if(e.target.matches("input.sk-in[data-ga]") && e.target.type!=="date") gaAggiorna(e.target); });
+document.getElementById("gaList").addEventListener("change", e=>{
+  if(e.target.matches("[data-ga]")){ gaAggiorna(e.target); renderGare(); }
+});
+document.getElementById("gaPassBtn").addEventListener("click", ()=>{ gaPassate = !gaPassate; renderGare(); });
+document.getElementById("gaAddToggle").addEventListener("click", ()=> document.getElementById("gaAddForm").classList.toggle("open"));
+document.getElementById("gaAddSave").addEventListener("click", ()=>{
+  const titolo = document.getElementById("gaAddTitolo").value.trim(), d = document.getElementById("gaAddData").value, a = document.getElementById("gaAddFine").value;
+  const err = document.getElementById("gaAddError");
+  if(!titolo || !d){ err.classList.add("show"); return; }
+  err.classList.remove("show");
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  gare().push({ id, d, a: a && a>d ? a : "", titolo, tipo: document.getElementById("gaAddTipo").value, note:"" });
+  ["gaAddTitolo","gaAddData","gaAddFine"].forEach(i=>{ document.getElementById(i).value = ""; });
+  document.getElementById("gaAddForm").classList.remove("open");
+  saveData(); renderGare();
+});
+document.getElementById("tabGare").addEventListener("click", ()=>setTab("gare"));
+// pubblica il calendario nel documento pubblico letto dalla pagina dei genitori
+async function pubblicaGare(){
+  try{
+    if(!window.cloudGenitori) return;
+    const lista = gaOrdinate().map(g=>({ d:g.d, a:g.a||"", titolo:g.titolo, tipo:g.tipo, note:g.note||"" }));
+    const h = lkHash(JSON.stringify(lista));
+    let prima = null; try{ prima = localStorage.getItem("pranzi_pubGare"); }catch(e){}
+    if(prima===h) return;
+    await window.cloudGenitori.pubblica("calendario-gare", { v:1, gare:lista, pdf:"calendario-gare.pdf", aggiornato:new Date().toISOString() });
+    try{ localStorage.setItem("pranzi_pubGare", h); }catch(e){}
+  }catch(e){ console.error(e); }
+}
+
 document.getElementById("registerDate").addEventListener("change", (e)=>{
   registerDate = e.target.value || todayISO(0);
   renderRegisterList();
@@ -2032,6 +2189,13 @@ function mergeState(b, l, r){
     else if(rx){ Object.keys(x).forEach(f=>{ if(JSON.stringify(x[f])!==JSON.stringify(bx[f])) rx[f] = x[f]; }); }
   });
   bS.forEach(x=>{ if(!lS.some(y=>y.id===x.id)) out.schede = out.schede.filter(y=>y.id!==x.id); });
+  { const bG = b.gare || [], lG = l.gare || []; out.gare = out.gare || [];
+    lG.forEach(x=>{
+      const bx = bG.find(y=>y.id===x.id), rx = out.gare.find(y=>y.id===x.id);
+      if(!bx){ if(!rx) out.gare.push(x); }
+      else if(rx){ Object.keys(x).forEach(f=>{ if(JSON.stringify(x[f])!==JSON.stringify(bx[f])) rx[f] = x[f]; }); }
+    });
+    bG.forEach(x=>{ if(!lG.some(y=>y.id===x.id)) out.gare = out.gare.filter(y=>y.id!==x.id); }); }
   { const bR = b.rubrica || [], lR = l.rubrica || []; out.rubrica = out.rubrica || [];
     lR.forEach(x=>{
       const bx = bR.find(y=>y.id===x.id), rx = out.rubrica.find(y=>y.id===x.id);
