@@ -321,6 +321,7 @@
   </div>
   <div style="font-size:13px; color:var(--ink-soft); line-height:1.5;">Ogni bambino ha un link personale: il genitore lo apre dal telefono, senza password, e vede solo i pranzi e i versamenti del suo bambino (non lo Ski room). Il link si aggiorna ogni volta che premi Salva. Mandalo solo al genitore giusto.</div>
   <button class="bk-btn" id="lkTutti">🔗 Crea i link mancanti</button>
+  <button class="bk-btn sec" id="lkAggiorna">🔄 Aggiorna ora le pagine dei genitori</button>
   <input id="lkCerca" placeholder="Cerca un bambino…" style="width:100%; padding:11px 12px; border-radius:12px; border:1px solid var(--border); font-size:14px; background:#fff; margin:4px 0 6px;">
   <div id="lkLista"></div>
   <div id="lkMsg" style="font-size:13px; font-weight:700; color:var(--blue-dark); margin-top:10px; min-height:18px;"></div>
@@ -776,6 +777,27 @@ async function pubblicaGenitori(){
   lkPubInCorso = false;
   if(lkPubRichiesta){ lkPubRichiesta = false; pubblicaGenitori(); }
 }
+async function lkAggiornaOra(){
+  lkMsg("Aggiorno le pagine dei genitori…");
+  try{
+    if(!window.cloudGenitori) throw new Error("serve l'accesso online");
+    await pubblicaGare(true);
+    const u = lkStagione();
+    let n = 0;
+    for(const p of (appState.data[u.id] || [])){
+      const tok = (appState.link || {})[lkChiave(p)];
+      if(!tok) continue;
+      const pay = riepilogoGenitori(p, u);
+      await window.cloudGenitori.pubblica(tok, Object.assign({}, pay, { aggiornato: new Date().toISOString() }));
+      try{ localStorage.setItem("pranzi_pub_" + tok, lkHash(JSON.stringify(pay))); }catch(e){}
+      n++;
+    }
+    lkMsg("Fatto: calendario gare e " + n + (n===1 ? " pagina" : " pagine") + " dei genitori aggiornati.");
+  }catch(e){
+    const m = String((e && (e.code || e.message)) || e);
+    lkMsg(/permission|insufficient/i.test(m) ? "Non autorizzato: aggiorna le regole di Firebase (blocco «genitori») e riprova." : "Non riuscito: " + m);
+  }
+}
 async function copiaTesto(txt){
   try{ await navigator.clipboard.writeText(txt); return true; }catch(e){}
   try{
@@ -798,6 +820,7 @@ document.getElementById("lkBtn").addEventListener("click", lkApri);
 document.getElementById("lkClose").addEventListener("click", lkChiudi);
 document.getElementById("lkOverlay").addEventListener("click", e=>{ if(e.target.id==="lkOverlay") lkChiudi(); });
 document.getElementById("lkCerca").addEventListener("input", lkRender);
+document.getElementById("lkAggiorna").addEventListener("click", lkAggiornaOra);
 document.getElementById("lkTutti").addEventListener("click", ()=>{
   let n = 0;
   lkLista().forEach(p=>{ if(!lkToken(p, false)){ lkToken(p, true); n++; } });
@@ -2045,16 +2068,16 @@ document.getElementById("gaAddSave").addEventListener("click", ()=>{
 });
 document.getElementById("tabGare").addEventListener("click", ()=>setTab("gare"));
 // pubblica il calendario nel documento pubblico letto dalla pagina dei genitori
-async function pubblicaGare(){
+async function pubblicaGare(forza){
   try{
     if(!window.cloudGenitori) return;
     const lista = gaOrdinate().map(g=>({ d:g.d, a:g.a||"", titolo:g.titolo, tipo:g.tipo, note:g.note||"" }));
     const h = lkHash(JSON.stringify(lista));
     let prima = null; try{ prima = localStorage.getItem("pranzi_pubGare"); }catch(e){}
-    if(prima===h) return;
+    if(prima===h && !forza) return;
     await window.cloudGenitori.pubblica("calendario-gare", { v:1, gare:lista, pdf:"calendario-gare.pdf", aggiornato:new Date().toISOString() });
     try{ localStorage.setItem("pranzi_pubGare", h); }catch(e){}
-  }catch(e){ console.error(e); }
+  }catch(e){ if(forza) throw e; console.error(e); }
 }
 
 document.getElementById("registerDate").addEventListener("change", (e)=>{
@@ -2289,6 +2312,7 @@ onAuthStateChanged(auth, async u=>{
     started = false; return;
   }
   await window.startApp();
+  try{ pubblicaGare(); pubblicaGenitori(); }catch(e){}
   window.cloud.pronto = true;
   if(window.bkControllaSera) window.bkControllaSera();
   if(!existed) await saveNow();
