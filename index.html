@@ -185,6 +185,14 @@
   .sr-btns button{ flex:1; padding:11px 4px; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:700; font-size:12.5px; line-height:1.2; }
   .sr-btns button:disabled{ opacity:.35; }
   .sr-tag{ font-weight:700; }
+  .gr-card{ background:#fff; border-radius:14px; margin:0 16px 8px; overflow:hidden; border-left:6px solid var(--border); }
+  .gr-head{ width:100%; display:block; text-align:left; padding:11px 14px; background:none; border:none; font:inherit; color:inherit; cursor:pointer; }
+  .gr-d{ font-size:12.5px; color:var(--ink-soft); font-weight:700; margin-top:2px; }
+  .gr-t{ font-size:15.5px; font-weight:800; }
+  .gf-gap{ color:var(--blue); font-weight:800; margin-left:6px; }
+  .gf-cat{ font-size:12px; font-weight:800; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; margin:14px 14px 2px; }
+  .gf-pre{ white-space:pre-wrap; font-size:11px; background:#0F1B3D; color:#E8EEFF; border-radius:10px; padding:10px; max-height:260px; overflow:auto; margin-top:8px; }
+  .gf-av{ color:#B7791F; font-weight:700; }
   .segmented.tabs-main{ display:none !important; }
   .home-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin:18px 16px 0; }
   .home-btn{ background:#fff; border:1px solid var(--border); border-radius:18px; padding:20px 10px 16px; display:flex; flex-direction:column; align-items:center; gap:6px; font:inherit; color:var(--ink); box-shadow:0 2px 8px rgba(20,48,107,.08); cursor:pointer; }
@@ -405,6 +413,12 @@
 
 <!-- GARE -->
 <div id="gareView" style="display:none;">
+  <div class="segmented" id="gareTabs">
+    <button id="gtCal" class="active">📅 Calendario</button>
+    <button id="gtPart">🚦 Ordine di partenza</button>
+    <button id="gtClass">🏆 Classifiche</button>
+  </div>
+  <div id="gareCal">
   <div id="gaProssima"></div>
   <div style="display:flex; gap:8px; margin:12px 16px 0;">
     <a class="quick-day-btn" href="calendario-gare.pdf" target="_blank" style="text-decoration:none; text-align:center; flex:1;">📄 Calendario PDF</a>
@@ -424,6 +438,8 @@
     </div>
   </div>
   <div class="list" id="gaList"></div>
+  </div>
+  <div id="gareFolders" style="display:none;"></div>
 </div>
 
 <!-- RUBRICA -->
@@ -2076,6 +2092,10 @@ function gaQuando(g){
 function gaGiorni(iso){ return Math.round((new Date(iso + "T00:00:00") - new Date(todayISO(0) + "T00:00:00")) / 86400000); }
 function gaOrdinate(){ return gare().slice().sort((a,b)=> a.d < b.d ? -1 : a.d > b.d ? 1 : a.titolo.localeCompare(b.titolo)); }
 function renderGare(){
+  [["gtCal","cal"],["gtPart","partenza"],["gtClass","classifica"]].forEach(([id,m])=> document.getElementById(id).classList.toggle("active", gtModo===m));
+  document.getElementById("gareCal").style.display = gtModo==="cal" ? "" : "none";
+  document.getElementById("gareFolders").style.display = gtModo==="cal" ? "none" : "";
+  if(gtModo!=="cal"){ renderCartelle(); return; }
   const oggi = todayISO(0);
   const tutte = gaOrdinate();
   const passate = tutte.filter(g=>gaFine(g) < oggi), future = tutte.filter(g=>gaFine(g) >= oggi);
@@ -2163,6 +2183,315 @@ async function pubblicaGare(forza){
     try{ localStorage.setItem("pranzi_pubGare", h); }catch(e){}
   }catch(e){ if(forza) throw e; console.error(e); }
 }
+
+// ---------- GARE: ORDINE DI PARTENZA E CLASSIFICHE (da PDF) ----------
+let gtModo = "cal";
+const GF = { partenza:{ chiave:"gareStart", titolo:"Ordine di partenza" }, classifica:{ chiave:"gareClass", titolo:"Classifiche" } };
+let gfAperta = { partenza:null, classifica:null }, gfMsg = "", gfEdit = null, gfForm = null, gfTestoVisto = null, gfDelCart = null, gfDelTimer = null;
+function gfCartelle(t){ const k = GF[t].chiave; if(!appState[k]) appState[k] = []; return appState[k]; }
+
+// --- lettura del PDF (libreria pdf.js, caricata solo quando serve) ---
+let pdfjsPromessa = null;
+function caricaPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(pdfjsPromessa) return pdfjsPromessa;
+  pdfjsPromessa = new Promise((ok, ko)=>{
+    const sc = document.createElement("script");
+    sc.src = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js";
+    sc.onload = ()=>{ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js"; ok(window.pdfjsLib); }catch(e){ pdfjsPromessa = null; ko(e); } };
+    sc.onerror = ()=>{ pdfjsPromessa = null; ko(new Error("pdf.js non raggiungibile")); };
+    document.head.appendChild(sc);
+  });
+  return pdfjsPromessa;
+}
+// ricostruisce le righe di testo dalle parole con le loro posizioni
+function itemsInRighe(items){
+  const v = items.filter(i=>i.s && i.s.trim()!=="").sort((a,b)=> (b.y - a.y) || (a.x - b.x));
+  const gruppi = []; let cur = [], y0 = null;
+  v.forEach(i=>{
+    if(y0===null || Math.abs(i.y - y0) <= 3){ cur.push(i); if(y0===null) y0 = i.y; }
+    else { gruppi.push(cur); cur = [i]; y0 = i.y; }
+  });
+  if(cur.length) gruppi.push(cur);
+  return gruppi.map(g=>{
+    g.sort((a,b)=>a.x-b.x);
+    let t = "", fine = null;
+    g.forEach(i=>{ if(fine!==null && (i.x - fine) > 1.5) t += " "; t += i.s; fine = i.x + (i.w || 0); });
+    return t.replace(/\s+/g, " ").trim();
+  }).filter(Boolean);
+}
+async function leggiPdf(file){
+  const lib = await caricaPdfJs();
+  const pdf = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const righe = [];
+  for(let n = 1; n <= pdf.numPages; n++){
+    const tc = await (await pdf.getPage(n)).getTextContent();
+    itemsInRighe(tc.items.map(i=>({ s:i.str, x:i.transform[4], y:i.transform[5], w:i.width || 0 }))).forEach(r=>righe.push(r));
+  }
+  return righe;
+}
+
+// --- analisi del testo: nomi, pettorali, categorie, risultati, distacchi, posizioni per anno ---
+const RE_ANNO = /^20[0-2]\d$/;
+const RE_TEMPO = /^(\d{1,2}:)?\d{1,3}[.,]\d{1,3}$/;
+const RE_STATO = /^(DNF|DSQ|DNS|DQ|SQ|RIT|RT|NP|NC|DISQ|SQUALIF)$/;
+const RE_CAT = /(SUPER ?BABY|BABY|CUCCIOL|MASCHIL|FEMMINIL|MASCHI\b|FEMMINE\b|RAGAZZ|ALLIEV|GIOVANISS|PULCINI|CATEGORIA)/;
+function gfChiave(t){ return normNome(t).replace(/[^A-Z0-9 ]/g, " ").split(/\s+/).filter(Boolean).sort().join(" "); }
+function gfSec(t){
+  const m = String(t).replace(",", ".").match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+  return m ? (m[1] ? Number(m[1]) * 60 : 0) + Number(m[2]) : null;
+}
+function gfDistacco(sec){
+  sec = Math.round(sec * 100) / 100;
+  if(sec < 60) return "+" + sec.toFixed(2).replace(".", ",");
+  const m = Math.floor(sec / 60);
+  return "+" + m + ":" + (sec - m * 60).toFixed(2).padStart(5, "0").replace(".", ",");
+}
+function leggiRiga(r){
+  const tk = r.replace(/\s+/g, " ").trim().split(" ");
+  const iA = tk.findIndex(t=>RE_ANNO.test(t));
+  const tempi = tk.filter(t=>RE_TEMPO.test(t));
+  const stato = tk.map(t=>t.toUpperCase().replace(/\./g, "")).find(t=>RE_STATO.test(t)) || "";
+  const o = { r, anno: iA >= 0 ? Number(tk[iA]) : 0, piccoli: [], nome: "", soc: "", tempo: tempi.length ? tempi[tempi.length - 1] : "", stato,
+    alfa: tk.map(t=>gfChiave(t)).filter(t=>t.length >= 2 && !/\d/.test(t)) };
+  let i = 0;
+  const fineNumeri = iA >= 0 ? iA : tk.length;
+  while(i < fineNumeri && /^\d+$/.test(tk[i])){ if(tk[i].length <= 4) o.piccoli.push(tk[i]); i++; }
+  if(iA >= 0){
+    o.nome = tk.slice(i, iA).filter(t=>!/^\d+$/.test(t) && !RE_STATO.test(t.toUpperCase().replace(/\./g, ""))).join(" ");
+    const soc = []; let j = iA + 1;
+    while(j < tk.length && !RE_TEMPO.test(tk[j]) && !/^\+/.test(tk[j]) && !RE_STATO.test(tk[j].toUpperCase().replace(/\./g, ""))) soc.push(tk[j++]);
+    o.soc = soc.join(" ");
+  }
+  return o;
+}
+function categoriaDa(r){
+  const u = normNome(r);
+  let cl = /SUPER ?BABY/.test(u) ? "superbaby" : /BABY/.test(u) ? "baby" : /CUCCIOL/.test(u) ? "cuccioli" : "";
+  if(!cl){ const m = u.match(/RAGAZZ\w*|ALLIEV\w*|GIOVANISS\w*|PULCINI/); if(m) cl = m[0].toLowerCase(); }
+  const ses = /FEMMINIL|FEMMINE|\bF\b|DONNE|GIRLS/.test(u) ? "femminile" : /MASCHIL|MASCHI\b|\bM\b|UOMINI|BOYS/.test(u) ? "maschile" : "";
+  return { cl, ses, label: [cl, ses].filter(Boolean).join(" ") || r.trim() };
+}
+function gfCorrisponde(x, a){
+  if(x.nome){
+    const k = gfChiave(x.nome);
+    if(k===a.key) return true;
+    const ta = a.key.split(" "), tr = k.split(" ");
+    return ta.every(t=>tr.includes(t)) && tr.length - ta.length <= 1;
+  }
+  return a.key.split(" ").every(t=>x.alfa.includes(t));
+}
+function analizza(righe, atleti, tipo){
+  const blocchi = [{ cat:null, righe:[] }]; let blocco = blocchi[0], lette = 0;
+  righe.forEach(r=>{
+    const inf = leggiRiga(r);
+    if(!inf.anno && !inf.tempo && RE_CAT.test(normNome(r)) && r.length < 100 && !/\bPOS\b|PETT|COGNOME/i.test(r)){
+      blocco = { cat: categoriaDa(r), righe: [] }; blocchi.push(blocco); return;
+    }
+    if(inf.anno || (/^\d{1,4}\s+\D/.test(r) && inf.alfa.length >= 2)){ blocco.righe.push(inf); lette++; }
+  });
+  const trovati = [];
+  atleti.forEach(a=>{
+    let cand = [];
+    blocchi.forEach(b=>b.righe.forEach(x=>{ if(gfCorrisponde(x, a)) cand.push({ b, x }); }));
+    if(!cand.length) return;
+    let av = "";
+    if(cand.length > 1){
+      const lim = cand.filter(c=>/LIMONE/.test(normNome(c.x.soc)));
+      if(lim.length) cand = lim;
+      else {
+        const stessoAnno = a.anno ? cand.filter(c=>c.x.anno===a.anno) : [];
+        if(stessoAnno.length) cand = stessoAnno; else av = "omonimo: controlla";
+      }
+    }
+    const { b, x } = cand[0];
+    if(!av && x.soc && !/LIMONE/.test(normNome(x.soc))) av = "società: " + x.soc;
+    const en = { n:a.nome, g:a.gruppo || "", a:x.anno || a.anno || 0, cat: b.cat ? b.cat.label : (a.gruppo || ""), soc:x.soc, av };
+    if(tipo==="partenza") en.p = x.piccoli[0] || "";
+    else {
+      en.st = x.stato; en.pos = x.stato ? "" : (x.piccoli[0] || ""); en.t = x.tempo; en.gap = "";
+      const sec = gfSec(x.tempo), lead = b.righe.find(y=>y.tempo && !y.stato), secLead = lead ? gfSec(lead.tempo) : null;
+      if(sec!==null && secLead!==null && lead!==x) en.gap = gfDistacco(sec - secLead);
+      const stessi = b.righe.filter(y=>y.anno && y.anno===x.anno && !y.stato && (y.tempo || y.piccoli.length));
+      en.pa = x.anno ? stessi.indexOf(x) + 1 : 0; en.na = x.anno ? stessi.length : 0;
+    }
+    trovati.push(en);
+  });
+  if(tipo==="classifica"){
+    const perAnno = {};
+    trovati.forEach(e=>{ if(e.a && !e.st && e.pos) (perAnno[e.a] = perAnno[e.a] || []).push(e); });
+    Object.keys(perAnno).forEach(y=>{
+      const L = perAnno[y], tutti = L.every(e=>gfSec(e.t)!==null);
+      L.sort((p,q)=> tutti ? gfSec(p.t) - gfSec(q.t) : Number(p.pos) - Number(q.pos));
+      L.forEach((e,i)=>{ e.pn = i + 1; e.nn = L.length; });
+    });
+  }
+  return { atleti: trovati, righe: righe.length, riconosciute: lette };
+}
+function atletiElenco(){
+  return lkLista().map(p=>({ nome: p.cognome + " " + p.nome, key: gfChiave(p.cognome + " " + p.nome), gruppo: gruppoDi(p), anno: annoDi(p) }));
+}
+
+// --- cartelle, caricamento e visualizzazione ---
+function gfNuovoId(){ return "f" + Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+function gfCartellaAperta(){ return gfCartelle(gtModo).find(c=>c.id===gfAperta[gtModo]); }
+function gfRigaHtml(f, e, i){
+  const k = f.id + "|" + i, tipo = gtModo;
+  let tit, sub1, sub2 = "";
+  if(tipo==="partenza"){
+    tit = skEsc(e.n);
+    sub1 = "Pettorale " + (e.p || "—") + (e.cat ? " · " + skEsc(e.cat) : "") + (e.soc ? " · " + skEsc(e.soc) : "");
+  } else {
+    tit = (e.st ? "" : (e.pos ? e.pos + "° " : "")) + skEsc(e.n) + (e.gap ? `<span class="gf-gap">${skEsc(e.gap)}</span>` : "") + (e.st ? `<span class="gf-gap">${skEsc(e.st)}</span>` : "");
+    sub1 = (e.cat ? skEsc(e.cat) + " · " : "") + (e.t ? "tempo " + skEsc(e.t) : "senza tempo");
+    if(e.a && e.pa) sub2 = `Nati nel ${e.a}: ${e.pa}° su ${e.na}` + (e.pn ? ` · ${e.pn}° dei nostri ${e.a}` : "");
+  }
+  let edit = "";
+  if(gfEdit===k && gfForm){
+    edit = `<div class="rg-edit">
+      ${tipo==="partenza" ? `<div class="rg-lbl" style="margin-top:0">Pettorale</div><input class="rg-in" id="gfE1" inputmode="numeric" value="${skEsc(gfForm.p)}">`
+        : `<div class="rg-lbl" style="margin-top:0">Posizione</div><input class="rg-in" id="gfE1" inputmode="numeric" value="${skEsc(gfForm.pos)}"><div class="rg-lbl">Distacco (es. +2,56)</div><input class="rg-in" id="gfE3" value="${skEsc(gfForm.gap)}">`}
+      <div class="rg-lbl">Categoria</div><input class="rg-in" id="gfE2" value="${skEsc(gfForm.cat)}">
+      <div class="rg-actions"><button style="background:var(--blue); color:#fff;" data-gfsave="${k}">Salva</button><button style="background:#fff; color:var(--ink-soft); border:1px solid var(--border);" data-gfcancel="1">Annulla</button></div></div>`;
+  }
+  return `<div class="rg-item"><div class="rg-line"><div><div class="name">${tit}</div><div class="sub">${sub1}${e.av ? ` · <span class="gf-av">⚠ ${skEsc(e.av)}</span>` : ""}</div>${sub2 ? `<div class="sub">${sub2}</div>` : ""}</div>
+    <div style="display:flex; flex-shrink:0;"><button class="rg-btn" data-gfedit="${k}" title="Correggi">✎</button><button class="rg-btn" data-gfdelrow="${k}" title="Togli">✕</button></div></div>${edit}</div>`;
+}
+function gfFileHtml(f){
+  const tipo = gtModo, perCat = {};
+  (f.atleti || []).forEach((e,i)=>{ (perCat[e.cat || "senza categoria"] = perCat[e.cat || "senza categoria"] || []).push({ e, i }); });
+  const num = x => Number(x) || 9999;
+  let corpo = Object.keys(perCat).sort().map(c=>{
+    const L = perCat[c].sort((a,b)=> tipo==="partenza" ? num(a.e.p) - num(b.e.p) : num(a.e.pos) - num(b.e.pos));
+    return `<div class="gf-cat">${skEsc(c)}</div>` + L.map(x=>gfRigaHtml(f, x.e, x.i)).join("");
+  }).join("") || '<div class="sub" style="padding:10px 14px;">Nessuno dei nostri atleti trovato in questo PDF. Controlla il testo estratto qui sotto: se i nomi ci sono ma l\'app non li riconosce, mandamelo e sistemo.</div>';
+  if(tipo==="classifica"){
+    const anni = {};
+    (f.atleti || []).forEach(e=>{ if(e.a && e.pn) (anni[e.a] = anni[e.a] || []).push(e); });
+    const ys = Object.keys(anni).sort((a,b)=>b-a);
+    if(ys.length) corpo = `<div class="gf-cat">I nostri per anno di nascita</div>` + ys.map(y=>`<div class="rg-item"><div class="name">${y}</div>` + anni[y].sort((p,q)=>p.pn-q.pn).map(e=>`<div class="sub">${e.pn}° ${skEsc(e.n)} · ${e.pos}° in classifica${e.gap ? " " + skEsc(e.gap) : ""}</div>`).join("") + `</div>`).join("") + corpo;
+  }
+  const nomiTrovati = new Set((f.atleti || []).map(e=>e.n));
+  const mancanti = lkLista().map(p=>p.cognome + " " + p.nome).filter(n=>!nomiTrovati.has(n));
+  const testo = gfTestoVisto && gfTestoVisto.id===f.id ? `<div class="gf-pre">${skEsc(gfTestoVisto.testo)}</div><button class="quick-day-btn" data-gfcopia="${f.id}" style="margin-top:6px;">📋 Copia testo</button>` : "";
+  return `<div class="gr-card" style="border-left-color:var(--blue);"><div style="padding:11px 14px;">
+    <div class="gr-t">${skEsc(f.nome)}</div>
+    <div class="gr-d">${fmtFull(f.data)} · ${(f.atleti||[]).length} dei nostri atleti trovati · ${f.righe} righe lette</div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+      <button class="quick-day-btn" data-gfril="${f.id}">↻ Rianalizza</button>
+      <button class="quick-day-btn" data-gftesto="${f.id}">📝 Testo estratto</button>
+      <button class="quick-day-btn" data-gfdelfile="${f.id}">🗑 Elimina</button>
+    </div>${testo}</div>${corpo}
+    ${mancanti.length ? `<details style="padding:8px 14px 12px;"><summary class="sub" style="cursor:pointer;">Non trovati (${mancanti.length})</summary><div class="sub" style="margin-top:6px;">${mancanti.map(skEsc).join(" · ")}</div></details>` : ""}</div>`;
+}
+function renderCartelle(){
+  const t = gtModo, box = document.getElementById("gareFolders"), aperta = gfCartellaAperta();
+  const msg = gfMsg ? `<div class="sub" style="margin:10px 16px 0; font-weight:700; color:var(--blue-dark);">${skEsc(gfMsg)}</div>` : "";
+  if(!aperta){
+    const lista = gfCartelle(t).slice().sort((a,b)=> a.creata < b.creata ? 1 : -1);
+    box.innerHTML = `<div style="display:flex; gap:8px; margin:14px 16px 0;"><input id="gfNome" placeholder="Nome della cartella (es. Prato Nevoso 6 gen)" style="flex:1; min-width:0; padding:11px 12px; border-radius:12px; border:1px solid var(--border); font-size:14px; background:#fff;"><button class="quick-day-btn" data-gfcrea="1">+ Crea</button></div>${msg}`
+      + (lista.length ? lista.map(c=>`<div class="gr-card" style="margin-top:10px; border-left-color:var(--blue);"><button class="gr-head" data-gfopen="${c.id}"><div class="gr-t">📁 ${skEsc(c.nome)}</div><div class="gr-d">${(c.files||[]).length} ${(c.files||[]).length===1 ? "PDF" : "PDF"} · creata il ${fmtFull(c.creata)}</div></button></div>`).join("") : `<div class="empty" style="margin:14px 16px;">Nessuna cartella: scrivi un nome e tocca “+ Crea”.</div>`);
+    return;
+  }
+  box.innerHTML = `<div style="display:flex; align-items:center; gap:8px; margin:14px 16px 0;"><button class="quick-day-btn" data-gfback="1">← Cartelle</button><div class="gr-t" style="flex:1; min-width:0;">📁 ${skEsc(aperta.nome)}</div></div>
+    <div style="display:flex; gap:8px; margin:10px 16px 0;"><label class="quick-day-btn" style="flex:1; text-align:center; cursor:pointer;">📄 Carica PDF<input type="file" id="gfFile" accept="application/pdf,.pdf" style="display:none;"></label>
+    <button class="quick-day-btn" data-gfdelcart="${aperta.id}">${gfDelCart===aperta.id ? "Tocca di nuovo per eliminare" : "🗑 Elimina cartella"}</button></div>${msg}
+    <div style="margin-top:10px;">${(aperta.files||[]).slice().reverse().map(gfFileHtml).join("") || `<div class="empty" style="margin:14px 16px;">Cartella vuota: tocca “📄 Carica PDF”.</div>`}</div>`;
+}
+function gfElabora(righe, nomeFile, tipo){
+  const cart = gfCartelle(tipo).find(c=>c.id===gfAperta[tipo]);
+  if(!cart) return null;
+  const res = analizza(righe, atletiElenco(), tipo);
+  const f = { id: gfNuovoId(), nome: nomeFile, data: todayISO(0), atleti: res.atleti, righe: res.righe };
+  if(!cart.files) cart.files = [];
+  cart.files.push(f);
+  if(window.cloudTesti) window.cloudTesti.salva(f.id, righe.join("\n")).catch(()=>{});
+  saveData();
+  return f;
+}
+async function gfCarica(file){
+  gfMsg = "Leggo il PDF…"; renderCartelle();
+  let righe;
+  try{ righe = await leggiPdf(file); }
+  catch(e){ gfMsg = "Non riesco a leggere il PDF: controlla la connessione (serve per caricare lo strumento di lettura) e riprova."; renderCartelle(); return; }
+  if(righe.length < 3){ gfMsg = "Questo PDF non contiene testo leggibile (forse è una scansione o una foto)."; renderCartelle(); return; }
+  const f = gfElabora(righe, file.name, gtModo);
+  gfMsg = f ? (f.atleti.length ? "Fatto: trovati " + f.atleti.length + " dei nostri atleti. Controlla i dati e premi Salva." : "Il PDF è stato letto ma non ho trovato i nostri atleti: apri «Testo estratto» per vedere cosa contiene.") : "";
+  render();
+}
+async function gfRianalizza(id){
+  const cart = gfCartellaAperta(), f = cart && cart.files.find(x=>x.id===id);
+  if(!f) return;
+  if(!window.cloudTesti){ gfMsg = "Serve la connessione per rileggere il testo salvato."; renderCartelle(); return; }
+  let testo = null; try{ testo = await window.cloudTesti.leggi(id); }catch(e){}
+  if(!testo){ gfMsg = "Il testo di questo PDF non è disponibile: caricalo di nuovo."; renderCartelle(); return; }
+  if(!confirm("Rianalizzare questo PDF? Le correzioni fatte a mano su questa lista andranno perse.")) return;
+  const res = analizza(testo.split("\n"), atletiElenco(), gtModo);
+  f.atleti = res.atleti; f.righe = res.righe;
+  gfMsg = "Rianalizzato: " + f.atleti.length + " dei nostri atleti. Premi Salva."; saveData(); render();
+}
+document.getElementById("gareFolders").addEventListener("click", async e=>{
+  const t = gtModo, q = sel => e.target.closest(sel);
+  if(q("[data-gfcrea]")){
+    const nome = document.getElementById("gfNome").value.trim();
+    if(!nome){ gfMsg = "Scrivi il nome della cartella."; renderCartelle(); return; }
+    const c = { id: gfNuovoId(), nome, creata: todayISO(0), files: [] };
+    gfCartelle(t).push(c); gfAperta[t] = c.id; gfMsg = ""; saveData(); renderCartelle(); return;
+  }
+  if(q("[data-gfopen]")){ gfAperta[t] = q("[data-gfopen]").dataset.gfopen; gfMsg = ""; gfEdit = null; gfTestoVisto = null; renderCartelle(); return; }
+  if(q("[data-gfback]")){ gfAperta[t] = null; gfMsg = ""; gfEdit = null; gfTestoVisto = null; renderCartelle(); return; }
+  if(q("[data-gfdelcart]")){
+    const id = q("[data-gfdelcart]").dataset.gfdelcart;
+    if(gfDelCart===id){
+      clearTimeout(gfDelTimer); gfDelCart = null;
+      const c = gfCartelle(t).find(x=>x.id===id);
+      (c && c.files || []).forEach(f=>{ if(window.cloudTesti) window.cloudTesti.elimina(f.id).catch(()=>{}); });
+      appState[GF[t].chiave] = gfCartelle(t).filter(x=>x.id!==id); gfAperta[t] = null; saveData(); renderCartelle();
+    } else { gfDelCart = id; renderCartelle(); clearTimeout(gfDelTimer); gfDelTimer = setTimeout(()=>{ gfDelCart = null; renderCartelle(); }, 3500); }
+    return;
+  }
+  const cart = gfCartellaAperta();
+  if(!cart) return;
+  const trovaFile = id => (cart.files || []).find(x=>x.id===id);
+  if(q("[data-gfril]")){ await gfRianalizza(q("[data-gfril]").dataset.gfril); return; }
+  if(q("[data-gftesto]")){
+    const id = q("[data-gftesto]").dataset.gftesto;
+    if(gfTestoVisto && gfTestoVisto.id===id){ gfTestoVisto = null; renderCartelle(); return; }
+    let testo = null; try{ testo = window.cloudTesti ? await window.cloudTesti.leggi(id) : null; }catch(er){}
+    gfTestoVisto = { id, testo: testo || "(testo non disponibile: serve la connessione, oppure il PDF è stato caricato da poco)" }; renderCartelle(); return;
+  }
+  if(q("[data-gfcopia]")){ const ok = gfTestoVisto ? await copiaTesto(gfTestoVisto.testo) : false; gfMsg = ok ? "Testo copiato." : "Copia non riuscita."; renderCartelle(); return; }
+  if(q("[data-gfdelfile]")){
+    const id = q("[data-gfdelfile]").dataset.gfdelfile, f = trovaFile(id);
+    if(f && confirm("Eliminare «" + f.nome + "» da questa cartella?")){ cart.files = cart.files.filter(x=>x.id!==id); if(window.cloudTesti) window.cloudTesti.elimina(id).catch(()=>{}); saveData(); renderCartelle(); }
+    return;
+  }
+  if(q("[data-gfedit]")){
+    const k = q("[data-gfedit]").dataset.gfedit, [fid, i] = k.split("|"), f = trovaFile(fid), en = f && f.atleti[Number(i)];
+    if(!en) return;
+    if(gfEdit===k){ gfEdit = null; gfForm = null; } else { gfEdit = k; gfForm = { p: en.p || "", pos: en.pos || "", gap: en.gap || "", cat: en.cat || "" }; }
+    renderCartelle(); return;
+  }
+  if(q("[data-gfdelrow]")){
+    const [fid, i] = q("[data-gfdelrow]").dataset.gfdelrow.split("|"), f = trovaFile(fid);
+    if(f && confirm("Togliere " + f.atleti[Number(i)].n + " da questa lista?")){ f.atleti.splice(Number(i), 1); gfEdit = null; saveData(); renderCartelle(); }
+    return;
+  }
+  if(q("[data-gfsave]")){
+    const [fid, i] = q("[data-gfsave]").dataset.gfsave.split("|"), f = trovaFile(fid), en = f && f.atleti[Number(i)];
+    if(!en) return;
+    const v1 = document.getElementById("gfE1").value.trim(), v2 = document.getElementById("gfE2").value.trim(), v3 = document.getElementById("gfE3");
+    if(t==="partenza") en.p = v1; else { en.pos = v1; en.gap = v3 ? v3.value.trim() : en.gap; }
+    en.cat = v2; gfEdit = null; gfForm = null; saveData(); renderCartelle(); return;
+  }
+  if(q("[data-gfcancel]")){ gfEdit = null; gfForm = null; renderCartelle(); }
+});
+document.getElementById("gareFolders").addEventListener("change", e=>{
+  if(e.target.id==="gfFile" && e.target.files && e.target.files[0]){ const f = e.target.files[0]; e.target.value = ""; gfCarica(f); }
+});
+document.getElementById("gtCal").addEventListener("click", ()=>{ gtModo = "cal"; render(); });
+document.getElementById("gtPart").addEventListener("click", ()=>{ gtModo = "partenza"; gfMsg = ""; render(); });
+document.getElementById("gtClass").addEventListener("click", ()=>{ gtModo = "classifica"; gfMsg = ""; render(); });
 
 document.getElementById("registerDate").addEventListener("change", (e)=>{
   registerDate = e.target.value || todayISO(0);
@@ -2298,6 +2627,15 @@ function mergeState(b, l, r){
     else if(rx){ Object.keys(x).forEach(f=>{ if(JSON.stringify(x[f])!==JSON.stringify(bx[f])) rx[f] = x[f]; }); }
   });
   bS.forEach(x=>{ if(!lS.some(y=>y.id===x.id)) out.schede = out.schede.filter(y=>y.id!==x.id); });
+  ["gareStart","gareClass"].forEach(k=>{
+    const bL = b[k] || [], lL = l[k] || []; out[k] = out[k] || [];
+    lL.forEach(x=>{
+      const bx = bL.find(y=>y.id===x.id), rx = out[k].find(y=>y.id===x.id);
+      if(!bx){ if(!rx) out[k].push(x); }
+      else if(rx){ Object.keys(x).forEach(f=>{ if(JSON.stringify(x[f])!==JSON.stringify(bx[f])) rx[f] = x[f]; }); }
+    });
+    bL.forEach(x=>{ if(!lL.some(y=>y.id===x.id)) out[k] = out[k].filter(y=>y.id!==x.id); });
+  });
   { const bG = b.gare || [], lG = l.gare || []; out.gare = out.gare || [];
     lG.forEach(x=>{
       const bx = bG.find(y=>y.id===x.id), rx = out.gare.find(y=>y.id===x.id);
@@ -2371,6 +2709,11 @@ window.cloudCopie = {
   }
 };
 
+window.cloudTesti = {
+  async salva(id, testo){ await setDoc(doc(db, "pranzi", "testo-" + id), { t: new Date().toISOString(), testo: String(testo).slice(0, 900000) }); },
+  async leggi(id){ const s = await getDoc(doc(db, "pranzi", "testo-" + id)); return s.exists() ? s.data().testo : null; },
+  async elimina(id){ await deleteDoc(doc(db, "pranzi", "testo-" + id)); }
+};
 window.cloudGenitori = {
   async pubblica(tok, dati){ await setDoc(doc(db, "genitori", tok), dati); },
   async elimina(tok){ await deleteDoc(doc(db, "genitori", tok)); }
