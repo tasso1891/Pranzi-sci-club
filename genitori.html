@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#14306B">
+<meta name="apple-mobile-web-app-title" content="Pranzi">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Pranzi · Sci Club</title>
 <style>
   :root{ --blue:#1D4ED8; --dark:#14306B; --yellow:#F2B705; --bg:#EEF3FF; --ink:#0F1B3D; --soft:#5B6B8F; --border:#D5DEF2; --ok:#1E8E4E; --warn:#B7791F; --bad:#C0392B; }
@@ -15,9 +19,17 @@
   h1{ margin:4px 0 0; font-size:24px; }
   main{ padding:16px; max-width:560px; margin:0 auto; }
   .card{ background:#fff; border:1px solid var(--border); border-radius:16px; padding:16px; margin-bottom:12px; }
-  .name{ font-size:22px; font-weight:800; }
+  .name{ font-size:26px; font-weight:800; line-height:1.15; }
   .sub{ color:var(--soft); font-size:13px; margin-top:2px; }
-  .badge{ display:inline-block; margin-top:10px; padding:6px 12px; border-radius:999px; font-weight:800; font-size:13px; color:#fff; }
+  .acc{ width:100%; display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--border); border-radius:16px; padding:16px; font:inherit; color:var(--ink); text-align:left; cursor:pointer; margin-bottom:10px; box-shadow:0 2px 8px rgba(20,48,107,.07); }
+  .acc .ico{ font-size:26px; }
+  .acc b{ font-size:18px; flex:1; }
+  .acc .chev{ font-size:18px; color:var(--soft); transition:transform .2s; }
+  .acc.open{ border-color:var(--blue); }
+  .acc.open .chev{ transform:rotate(180deg); }
+  .panel{ display:none; margin:0 0 12px; }
+  .panel.open{ display:block; }
+  .badge{ display:inline-block; padding:6px 12px; border-radius:999px; font-weight:800; font-size:13px; color:#fff; }
   .OK{ background:var(--ok); } .RICARICARE{ background:var(--warn); } .PAGARE{ background:var(--bad); }
   .detail{ margin-top:8px; font-size:15px; font-weight:600; }
   .tiles{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:14px; }
@@ -28,6 +40,7 @@
   .row{ display:flex; justify-content:space-between; gap:8px; padding:9px 0; border-top:1px solid var(--border); font-size:14.5px; }
   .row:first-of-type{ border-top:none; }
   .vuoto{ color:var(--soft); font-size:14px; }
+  .obiettivo{ white-space:pre-wrap; font-size:16px; line-height:1.5; }
   .next{ background:var(--blue); color:#fff; border-radius:16px; padding:14px 16px; margin-bottom:12px; }
   .next small{ display:block; font-size:11.5px; font-weight:800; letter-spacing:.08em; opacity:.85; }
   .next b{ display:block; font-size:19px; margin-top:2px; }
@@ -59,7 +72,22 @@ function data(iso){
   if(!iso) return "Versato in precedenza";
   return new Date(iso + "T00:00:00").toLocaleDateString("it-IT", { weekday:"short", day:"numeric", month:"short", year:"numeric" });
 }
-function errore(t){ out.replaceChildren(Object.assign(el("div", "card vuoto", t))); }
+function errore(t){ out.replaceChildren(el("div", "card vuoto", t)); }
+
+// pulsante + pannello: aprendone uno si chiudono gli altri
+const accordion = [];
+function sezione(icona, titolo, pannello){
+  const b = el("button", "acc");
+  b.append(el("span", "ico", icona), el("b", "", titolo), el("span", "chev", "⌄"));
+  pannello.classList.add("panel");
+  b.addEventListener("click", ()=>{
+    const aprire = !pannello.classList.contains("open");
+    accordion.forEach(x=>{ x.b.classList.remove("open"); x.p.classList.remove("open"); });
+    if(aprire){ b.classList.add("open"); pannello.classList.add("open"); }
+  });
+  accordion.push({ b, p: pannello });
+  return [b, pannello];
+}
 
 const token = new URLSearchParams(location.search).get("c");
 if(!token || !/^[A-Za-z0-9]{16,64}$/.test(token)){
@@ -75,35 +103,46 @@ if(!token || !/^[A-Za-z0-9]{16,64}$/.test(token)){
     else{
       const d = snap.data();
       const frag = document.createDocumentFragment();
-      const c1 = el("div", "card");
-      c1.append(el("div", "name", d.nome), el("div", "sub", "Stagione " + d.stagione));
-      c1.append(el("span", "badge " + d.stato.code, d.stato.label), el("div", "detail", d.stato.detail));
+
+      // nome del bambino
+      const c0 = el("div", "card");
+      c0.append(el("div", "name", d.nome), el("div", "sub", "Stagione " + d.stagione));
+      frag.append(c0);
+
+      // PRANZI: resoconto, versamenti, giorni in cui ha mangiato
+      const pPranzi = el("div");
+      const r1 = el("div", "card");
+      r1.append(el("span", "badge " + d.stato.code, d.stato.label), el("div", "detail", d.stato.detail));
       const t = el("div", "tiles");
       [[d.rimanenti, "pasti rimanenti"], ["€ " + d.pagato, "versati"], [d.consumati, "pasti mangiati"]].forEach(([v, l])=>{ const x = el("div", "tile"); x.append(el("b", "", String(v)), el("span", "", l)); t.append(x); });
-      c1.append(t, el("div", "sub", "Ogni pasto costa € " + d.prezzo + "."));
-      frag.append(c1);
-      const c2 = el("div", "card"); c2.append(el("h2", "", "Versamenti"));
-      if(!d.versamenti.length) c2.append(el("div", "vuoto", "Nessun versamento registrato."));
-      d.versamenti.forEach(v=>{ const r = el("div", "row"); r.append(el("span", "", data(v.d)), el("b", "", "€ " + v.eur)); c2.append(r); });
-      frag.append(c2);
-      const c3 = el("div", "card"); c3.append(el("h2", "", "Giorni in cui ha mangiato (" + d.giorni.length + ")"));
-      if(!d.giorni.length) c3.append(el("div", "vuoto", "Nessun pasto registrato."));
-      d.giorni.forEach(g=>{ const r = el("div", "row"); r.append(el("span", "", data(g)), el("span", "", "€ " + d.prezzo)); c3.append(r); });
-      frag.append(c3);
+      r1.append(t, el("div", "sub", "Ogni pasto costa € " + d.prezzo + "."));
+      pPranzi.append(r1);
+      const r2 = el("div", "card"); r2.append(el("h2", "", "Versamenti"));
+      if(!d.versamenti.length) r2.append(el("div", "vuoto", "Nessun versamento registrato."));
+      d.versamenti.forEach(v=>{ const r = el("div", "row"); r.append(el("span", "", data(v.d)), el("b", "", "€ " + v.eur)); r2.append(r); });
+      pPranzi.append(r2);
+      const r3 = el("div", "card"); r3.append(el("h2", "", "Giorni in cui ha mangiato (" + d.giorni.length + ")"));
+      if(!d.giorni.length) r3.append(el("div", "vuoto", "Nessun pasto registrato."));
+      d.giorni.forEach(g=>{ const r = el("div", "row"); r.append(el("span", "", data(g)), el("span", "", "€ " + d.prezzo)); r3.append(r); });
+      pPranzi.append(r3);
+      sezione("🍽️", "Pranzi", pPranzi).forEach(x=>frag.append(x));
+
+      // GARE: prossima gara e calendario completo
+      const pGare = el("div");
       if(snapGare && snapGare.exists() && (snapGare.data().gare || []).length){
         const cal = snapGare.data(), oggi = new Date(); oggi.setHours(0,0,0,0);
         const dt = s => new Date(s + "T00:00:00");
         const fine = x => x.a || x.d;
         const futuro = x => dt(fine(x)) >= oggi;
-        const breve = (x, conAnno) => dt(x).toLocaleDateString("it-IT", { weekday:"short", day:"numeric", month:"short" }) + (conAnno ? " " + dt(x).getFullYear() : "");
+        const breve = x => dt(x).toLocaleDateString("it-IT", { weekday:"short", day:"numeric", month:"short" });
         const quando = x => (!x.a || x.a===x.d) ? breve(x.d) : breve(x.d) + " – " + breve(x.a);
         const prossima = cal.gare.find(x=>x.tipo==="gara" && futuro(x));
         if(prossima){
           const gg = Math.round((dt(prossima.d) - oggi) / 86400000);
           const n = el("div", "next"); n.append(el("small", "", "PROSSIMA GARA"), el("b", "", prossima.titolo), el("span", "", quando(prossima) + " · " + (gg<=0 ? "in corso" : gg===1 ? "domani" : "tra " + gg + " giorni")));
-          frag.append(n);
+          pGare.append(n);
         }
-        const c4 = el("div", "card"); c4.append(el("h2", "", "Calendario gare"));
+        const c4 = el("div", "card"); c4.append(el("h2", "", "Tutte le gare"));
         let mese = "";
         const MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
         cal.gare.forEach(x=>{
@@ -114,8 +153,19 @@ if(!token || !/^[A-Za-z0-9]{16,64}$/.test(token)){
           r.append(w); c4.append(r);
         });
         if(cal.pdf){ const a = el("a", "btn", "📄 Apri il calendario ufficiale (PDF)"); a.href = cal.pdf; a.target = "_blank"; c4.append(a); }
-        frag.append(c4);
+        pGare.append(c4);
+      } else {
+        pGare.append(el("div", "card vuoto", "Il calendario gare non è ancora disponibile."));
       }
+      sezione("🏁", "Gare", pGare).forEach(x=>frag.append(x));
+
+      // OBIETTIVO: quello scritto sulla scheda del bambino
+      const pObb = el("div"), cO = el("div", "card");
+      if(d.obiettivo && String(d.obiettivo).trim()) cO.append(el("div", "obiettivo", String(d.obiettivo)));
+      else cO.append(el("div", "vuoto", "Per ora non è stato scritto nessun obiettivo."));
+      pObb.append(cO);
+      sezione("🎯", "Obiettivo", pObb).forEach(x=>frag.append(x));
+
       const ag = d.aggiornato ? new Date(d.aggiornato) : null;
       frag.append(el("div", "foot", ag ? "Aggiornato il " + ag.toLocaleDateString("it-IT", { day:"numeric", month:"long" }) + " alle " + ag.toLocaleTimeString("it-IT", { hour:"2-digit", minute:"2-digit" }) : ""));
       out.replaceChildren(frag);

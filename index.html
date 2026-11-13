@@ -794,7 +794,7 @@ function riepilogoGenitori(p, stagione){
   const prima = Math.max(0, pagato - vers.reduce((t,v)=>t+v.eur, 0));
   if(prima) vers.push({ d:"", eur:prima });
   const giorni = Object.keys(p.attendance||{}).filter(d=>p.attendance[d]===1).sort().reverse();
-  return { v:1, nome:p.cognome + " " + p.nome, stagione:stagione.label, prezzo:PREZZO_PASTO, pagato, consumati, saldo, rimanenti:rim, stato, versamenti:vers, giorni };
+  return { v:1, nome:p.cognome + " " + p.nome, stagione:stagione.label, prezzo:PREZZO_PASTO, pagato, consumati, saldo, rimanenti:rim, stato, versamenti:vers, giorni, obiettivo: String((schede().find(x=>normNome(x.nome)===lkChiave(p)) || {}).obiettivo || "") };
 }
 let lkPubInCorso = false, lkPubRichiesta = false;
 async function pubblicaGenitori(){
