@@ -2236,7 +2236,10 @@ const RE_ANNO = /^20[0-2]\d$/;
 const RE_TEMPO = /^(\d{1,2}:)?\d{1,3}[.,]\d{1,3}$/;
 const RE_STATO = /^(DNF|DSQ|DNS|DQ|SQ|RIT|RT|NP|NC|DISQ|SQUALIF)$/;
 const RE_CAT = /(SUPER ?BABY|BABY|CUCCIOL|MASCHIL|FEMMINIL|MASCHI\b|FEMMINE\b|RAGAZZ|ALLIEV|GIOVANISS|PULCINI|CATEGORIA)/;
-function gfChiave(t){ return normNome(t).replace(/[^A-Z0-9 ]/g, " ").split(/\s+/).filter(Boolean).sort().join(" "); }
+function gfChiave(t){ return normNome(t).replace(/[-.]/g, "").replace(/[^A-Z0-9 ]/g, " ").split(/\s+/).filter(Boolean).sort().join(" "); }
+// la società è la nostra solo se è "SC Limone" o "Scuola sci Limone" (Equipe Limone e Ski College Limone sono altre squadre)
+const SOC_NOSTRA = /(^|\s)(SC|S C|SCI CLUB|SCUOLA SCI) LIMONE(\s|$)/;
+function gfSocNostra(soc){ return SOC_NOSTRA.test(normNome(soc).replace(/[.]/g, "")); }
 function gfSec(t){
   const m = String(t).replace(",", ".").match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
   return m ? (m[1] ? Number(m[1]) * 60 : 0) + Number(m[2]) : null;
@@ -2259,9 +2262,18 @@ function leggiRiga(r){
   while(i < fineNumeri && /^\d+$/.test(tk[i])){ if(tk[i].length <= 4) o.piccoli.push(tk[i]); i++; }
   if(iA >= 0){
     o.nome = tk.slice(i, iA).filter(t=>!/^\d+$/.test(t) && !RE_STATO.test(t.toUpperCase().replace(/\./g, ""))).join(" ");
-    const soc = []; let j = iA + 1;
-    while(j < tk.length && !RE_TEMPO.test(tk[j]) && !/^\+/.test(tk[j]) && !RE_STATO.test(tk[j].toUpperCase().replace(/\./g, ""))) soc.push(tk[j++]);
+    const rest = tk.slice(iA + 1);
+    let k = 0;
+    if(/^[A-Z]{2,4}$/.test(rest[0] || "") && /^\d{3,6}$/.test(rest[1] || "")) k = 2; else if(/^\d{3,6}$/.test(rest[0] || "")) k = 1;
+    const soc = [];
+    for(let j = k; j < rest.length; j++){
+      const t = rest[j];
+      if(RE_TEMPO.test(t) || /^\+/.test(t) || RE_STATO.test(t.toUpperCase().replace(/\./g, "")) || /^\.{3,}$/.test(t) || /^PORTA$/i.test(t)) break;
+      soc.push(t);
+    }
     o.soc = soc.join(" ");
+    const mp = r.match(/PORTA\s*N\.?\s*(\d+)/i);
+    if(mp) o.mot = "porta " + mp[1];
   }
   return o;
 }
@@ -2277,18 +2289,23 @@ function gfCorrisponde(x, a){
     const k = gfChiave(x.nome);
     if(k===a.key) return true;
     const ta = a.key.split(" "), tr = k.split(" ");
-    return ta.every(t=>tr.includes(t)) && tr.length - ta.length <= 1;
+    return ta.every(t=>tr.includes(t)) && tr.length - ta.length <= 3;
   }
   return a.key.split(" ").every(t=>x.alfa.includes(t));
 }
 function analizza(righe, atleti, tipo){
-  const blocchi = [{ cat:null, righe:[] }]; let blocco = blocchi[0], lette = 0;
+  const blocchi = [{ cat:null, righe:[] }]; let blocco = blocchi[0], lette = 0, modo = "";
   righe.forEach(r=>{
+    const u = normNome(r);
+    if(/^ISCRITTI\b/.test(u)){ modo = ""; return; }
+    if(/^NON PARTIT/.test(u)){ modo = "NON PARTITO"; return; }
+    if(/^NON ARRIVAT/.test(u)){ modo = "NON ARRIVATO"; return; }
+    if(/^(SQUALIFICAT|DISQUALIFICAT)/.test(u)){ modo = "SQUALIFICATO"; return; }
     const inf = leggiRiga(r);
-    if(!inf.anno && !inf.tempo && RE_CAT.test(normNome(r)) && r.length < 100 && !/\bPOS\b|PETT|COGNOME/i.test(r)){
-      blocco = { cat: categoriaDa(r), righe: [] }; blocchi.push(blocco); return;
+    if(!inf.anno && !inf.tempo && RE_CAT.test(u) && r.length < 100 && !/\bPOS\b|PETT|COGNOME/i.test(r)){
+      blocco = { cat: categoriaDa(r), righe: [] }; blocchi.push(blocco); modo = ""; return;
     }
-    if(inf.anno || (/^\d{1,4}\s+\D/.test(r) && inf.alfa.length >= 2)){ blocco.righe.push(inf); lette++; }
+    if(inf.anno || (/^\d{1,4}\s+\D/.test(r) && inf.alfa.length >= 2)){ inf.modo = modo; blocco.righe.push(inf); lette++; }
   });
   const trovati = [];
   atleti.forEach(a=>{
@@ -2297,35 +2314,33 @@ function analizza(righe, atleti, tipo){
     if(!cand.length) return;
     let av = "";
     if(cand.length > 1){
-      const lim = cand.filter(c=>/LIMONE/.test(normNome(c.x.soc)));
-      if(lim.length) cand = lim;
+      const nostri = cand.filter(c=>gfSocNostra(c.x.soc));
+      if(nostri.length) cand = nostri;
       else {
         const stessoAnno = a.anno ? cand.filter(c=>c.x.anno===a.anno) : [];
         if(stessoAnno.length) cand = stessoAnno; else av = "omonimo: controlla";
       }
     }
     const { b, x } = cand[0];
-    if(!av && x.soc && !/LIMONE/.test(normNome(x.soc))) av = "società: " + x.soc;
+    if(!av && x.soc && !gfSocNostra(x.soc)) av = "società: " + x.soc;
     const en = { n:a.nome, g:a.gruppo || "", a:x.anno || a.anno || 0, cat: b.cat ? b.cat.label : (a.gruppo || ""), soc:x.soc, av };
     if(tipo==="partenza") en.p = x.piccoli[0] || "";
     else {
-      en.st = x.stato; en.pos = x.stato ? "" : (x.piccoli[0] || ""); en.t = x.tempo; en.gap = "";
-      const sec = gfSec(x.tempo), lead = b.righe.find(y=>y.tempo && !y.stato), secLead = lead ? gfSec(lead.tempo) : null;
-      if(sec!==null && secLead!==null && lead!==x) en.gap = gfDistacco(sec - secLead);
-      const stessi = b.righe.filter(y=>y.anno && y.anno===x.anno && !y.stato && (y.tempo || y.piccoli.length));
-      en.pa = x.anno ? stessi.indexOf(x) + 1 : 0; en.na = x.anno ? stessi.length : 0;
+      en.st = x.modo || x.stato; en.mot = x.mot || "";
+      en.p = x.modo ? (x.piccoli[0] || "") : (x.piccoli[1] || "");
+      en.pos = en.st ? "" : (x.piccoli[0] || ""); en.t = x.tempo; en.gap = ""; en.ga = "";
+      const ok = y=>y.tempo && !y.stato && !y.modo;
+      const sec = gfSec(x.tempo), lead = b.righe.find(ok), secLead = lead ? gfSec(lead.tempo) : null;
+      if(!en.st && sec!==null && secLead!==null && lead!==x) en.gap = gfDistacco(sec - secLead);
+      const stessi = b.righe.filter(y=>y.anno && y.anno===x.anno && ok(y));
+      if(!en.st && x.anno){
+        en.pa = stessi.indexOf(x) + 1; en.na = stessi.length;
+        const primo = stessi[0], secPrimo = primo ? gfSec(primo.tempo) : null;
+        if(primo && primo!==x && sec!==null && secPrimo!==null) en.ga = gfDistacco(sec - secPrimo);
+      } else { en.pa = 0; en.na = 0; }
     }
     trovati.push(en);
   });
-  if(tipo==="classifica"){
-    const perAnno = {};
-    trovati.forEach(e=>{ if(e.a && !e.st && e.pos) (perAnno[e.a] = perAnno[e.a] || []).push(e); });
-    Object.keys(perAnno).forEach(y=>{
-      const L = perAnno[y], tutti = L.every(e=>gfSec(e.t)!==null);
-      L.sort((p,q)=> tutti ? gfSec(p.t) - gfSec(q.t) : Number(p.pos) - Number(q.pos));
-      L.forEach((e,i)=>{ e.pn = i + 1; e.nn = L.length; });
-    });
-  }
   return { atleti: trovati, righe: righe.length, riconosciute: lette };
 }
 function atletiElenco(){
@@ -2342,9 +2357,9 @@ function gfRigaHtml(f, e, i){
     tit = skEsc(e.n);
     sub1 = "Pettorale " + (e.p || "—") + (e.cat ? " · " + skEsc(e.cat) : "") + (e.soc ? " · " + skEsc(e.soc) : "");
   } else {
-    tit = (e.st ? "" : (e.pos ? e.pos + "° " : "")) + skEsc(e.n) + (e.gap ? `<span class="gf-gap">${skEsc(e.gap)}</span>` : "") + (e.st ? `<span class="gf-gap">${skEsc(e.st)}</span>` : "");
-    sub1 = (e.cat ? skEsc(e.cat) + " · " : "") + (e.t ? "tempo " + skEsc(e.t) : "senza tempo");
-    if(e.a && e.pa) sub2 = `Nati nel ${e.a}: ${e.pa}° su ${e.na}` + (e.pn ? ` · ${e.pn}° dei nostri ${e.a}` : "");
+    tit = (e.st ? "" : (e.pos ? e.pos + "° " : "")) + skEsc(e.n) + (e.gap ? `<span class="gf-gap">${skEsc(e.gap)}</span>` : "") + (e.st ? `<span class="gf-gap" style="color:#B42318;">${skEsc(e.st)}${e.mot ? " · " + skEsc(e.mot) : ""}</span>` : "");
+    sub1 = (e.cat ? skEsc(e.cat) + " · " : "") + (e.t ? "tempo " + skEsc(e.t) : "senza tempo") + (e.p ? " · pett. " + skEsc(e.p) : "");
+    if(e.a && e.pa) sub2 = `Nati nel ${e.a}: ${e.pa}° su ${e.na}` + (e.ga ? ` · <b style="color:var(--blue);">${skEsc(e.ga)}</b>` : "");
   }
   let edit = "";
   if(gfEdit===k && gfForm){
@@ -2365,18 +2380,12 @@ function gfFileHtml(f){
     const L = perCat[c].sort((a,b)=> tipo==="partenza" ? num(a.e.p) - num(b.e.p) : num(a.e.pos) - num(b.e.pos));
     return `<div class="gf-cat">${skEsc(c)}</div>` + L.map(x=>gfRigaHtml(f, x.e, x.i)).join("");
   }).join("") || '<div class="sub" style="padding:10px 14px;">Nessuno dei nostri atleti trovato in questo PDF. Controlla il testo estratto qui sotto: se i nomi ci sono ma l\'app non li riconosce, mandamelo e sistemo.</div>';
-  if(tipo==="classifica"){
-    const anni = {};
-    (f.atleti || []).forEach(e=>{ if(e.a && e.pn) (anni[e.a] = anni[e.a] || []).push(e); });
-    const ys = Object.keys(anni).sort((a,b)=>b-a);
-    if(ys.length) corpo = `<div class="gf-cat">I nostri per anno di nascita</div>` + ys.map(y=>`<div class="rg-item"><div class="name">${y}</div>` + anni[y].sort((p,q)=>p.pn-q.pn).map(e=>`<div class="sub">${e.pn}° ${skEsc(e.n)} · ${e.pos}° in classifica${e.gap ? " " + skEsc(e.gap) : ""}</div>`).join("") + `</div>`).join("") + corpo;
-  }
   const nomiTrovati = new Set((f.atleti || []).map(e=>e.n));
   const mancanti = lkLista().map(p=>p.cognome + " " + p.nome).filter(n=>!nomiTrovati.has(n));
   const testo = gfTestoVisto && gfTestoVisto.id===f.id ? `<div class="gf-pre">${skEsc(gfTestoVisto.testo)}</div><button class="quick-day-btn" data-gfcopia="${f.id}" style="margin-top:6px;">📋 Copia testo</button>` : "";
   return `<div class="gr-card" style="border-left-color:var(--blue);"><div style="padding:11px 14px;">
     <div class="gr-t">${skEsc(f.nome)}</div>
-    <div class="gr-d">${fmtFull(f.data)} · ${(f.atleti||[]).length} dei nostri atleti trovati · ${f.righe} righe lette</div>
+    <div class="gr-d">${fmtFull(f.data)} · ${(f.atleti||[]).length} dei nostri atleti trovati${tipo==="classifica" ? (()=>{ const na = (f.atleti||[]).filter(e=>e.st==="NON ARRIVATO").length, sq = (f.atleti||[]).filter(e=>e.st==="SQUALIFICATO").length; return (na ? " · " + na + " non arrivat" + (na===1 ? "o" : "i") : "") + (sq ? " · " + sq + " squalificat" + (sq===1 ? "o" : "i") : ""); })() : ""} · ${f.righe} righe lette</div>
     <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
       <button class="quick-day-btn" data-gfril="${f.id}">↻ Rianalizza</button>
       <button class="quick-day-btn" data-gftesto="${f.id}">📝 Testo estratto</button>
