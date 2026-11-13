@@ -185,6 +185,15 @@
   .sr-btns button{ flex:1; padding:11px 4px; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:700; font-size:12.5px; line-height:1.2; }
   .sr-btns button:disabled{ opacity:.35; }
   .sr-tag{ font-weight:700; }
+  .segmented.tabs-main{ display:none !important; }
+  .home-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin:18px 16px 0; }
+  .home-btn{ background:#fff; border:1px solid var(--border); border-radius:18px; padding:20px 10px 16px; display:flex; flex-direction:column; align-items:center; gap:6px; font:inherit; color:var(--ink); box-shadow:0 2px 8px rgba(20,48,107,.08); cursor:pointer; }
+  .home-btn .ico{ font-size:34px; line-height:1.1; }
+  .home-btn b{ font-size:17px; }
+  .home-btn small{ font-size:11.5px; color:var(--ink-soft); text-align:center; }
+  .back-bar{ display:flex; align-items:center; gap:12px; margin:14px 16px 0; }
+  .back-bar button{ background:#fff; border:1px solid var(--border); color:var(--blue); font-weight:800; border-radius:12px; padding:9px 14px; font-size:14px; cursor:pointer; }
+  .back-bar .t{ font-size:19px; font-weight:800; color:var(--blue-dark); }
   .ga-pass{ opacity:.55; }
   .ga-next{ background:var(--blue); color:#fff; border-radius:16px; padding:14px 16px; margin:12px 16px 0; }
   .ga-mese{ margin:16px 4px 6px; font-size:12px; font-weight:800; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em; }
@@ -232,12 +241,28 @@
 <header>
   <div class="eyebrow">Sci Club</div>
   <h1>Registro Pranzi</h1>
-  <div class="stats">
+  <div class="stats" id="statsBox">
     <div class="stat"><div class="num" id="statPasti">0</div><div class="lbl">pasti totali</div></div>
     <div class="stat"><div class="num" id="statPagato">€0</div><div class="lbl">incassato</div></div>
     <div class="stat"><div class="num" id="statDaSistemare">0</div><div class="lbl">da sistemare</div></div>
   </div>
 </header>
+
+<div class="back-bar" id="backBar" style="display:none;"><button id="backBtn">← Home</button><div class="t" id="backTitle"></div></div>
+
+<!-- HOME -->
+<div id="homeView">
+  <div class="home-grid">
+    <button class="home-btn" data-go="registra"><span class="ico">🍽️</span><b>Pranzi</b><small>presenze e resoconto</small></button>
+    <button class="home-btn" data-go="persone"><span class="ico">🧒</span><b>Atleti</b><small>versamenti, gruppo, anno</small></button>
+    <button class="home-btn" data-go="attrezzatura"><span class="ico">📋</span><b>Schede</b><small>scarponi, sci, obiettivo</small></button>
+    <button class="home-btn" data-go="skiroom"><span class="ico">🎿</span><b>Ski room</b><small>sciolina e lamine</small></button>
+    <button class="home-btn" data-go="rubrica"><span class="ico">📇</span><b>Rubrica</b><small>contatti</small></button>
+    <button class="home-btn" data-go="gare"><span class="ico">🏁</span><b>Gare</b><small>calendario</small></button>
+  </div>
+</div>
+
+<div id="seasonBlock" style="display:none;">
 
 <div class="season-bar">
   <div class="season-chips" id="seasonChips"></div>
@@ -252,7 +277,14 @@
   <button class="save" id="seasonCreateBtn">Crea stagione</button>
 </div>
 
-<div class="segmented">
+</div>
+
+<div class="segmented" id="pranziTabs" style="display:none;">
+  <button id="ptRegistra" class="active">✓ Registra</button>
+  <button id="ptGiorni">📅 Giorni</button>
+</div>
+
+<div class="segmented tabs-main">
   <button id="tabRegistra" class="active">✓ Registra</button>
   <button id="tabPersone">👤 Persone</button>
   <button id="tabGiorni">📅 Giorni</button>
@@ -301,6 +333,7 @@
     <div class="add-form" id="addForm">
       <input id="addCognome" placeholder="Cognome">
       <input id="addNome" placeholder="Nome">
+      <input id="addAnno" inputmode="numeric" placeholder="Anno di nascita (facoltativo)">
       <div class="form-error" id="addError">Inserisci cognome e nome.</div>
       <button class="save" id="addSave">Aggiungi</button>
     </div>
@@ -511,8 +544,14 @@ const ANNI_PER_NOME = {};
 function normNome(t){ return String(t||"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/['’`´]/g,"").replace(/\s+/g," ").trim(); }
 function annoDi(p){ return Number(p.anno) || ANNI_PER_NOME[normNome(p.cognome + " " + p.nome)] || 0; }
 function gruppoDiAnno(a){ return (a===2015 || a===2016) ? "cuccioli" : (a===2017 || a===2018) ? "baby" : (a===2019 || a===2020) ? "superbaby" : ""; }
-function gruppoDi(p){ return gruppoDiAnno(annoDi(p)); }
-function gruppoScheda(x){ return gruppoDiAnno(ANNI_PER_NOME[normNome(x.nome)] || 0); }
+function gruppoDi(p){ return p.gruppo || gruppoDiAnno(annoDi(p)); }
+const GRUPPO_NOME = { cuccioli:"Cuccioli", baby:"Baby", superbaby:"Superbaby" };
+function gruppoScheda(x){
+  const k = normNome(x.nome), u = seasons[seasons.length-1];
+  const lista = u ? (u.id===currentSeasonId ? people : (appState.data[u.id] || [])) : [];
+  const p = lista.find(q=>normNome(q.cognome + " " + q.nome)===k);
+  return p ? gruppoDi(p) : gruppoDiAnno(ANNI_PER_NOME[k] || 0);
+}
 const GRUPPI = [["","tutti"],["cuccioli","cuccioli"],["baby","baby"],["superbaby","superbaby"]];
 function buildInitialPeople(){
   return RAW_DATA.people.map(p=>{
@@ -529,7 +568,7 @@ let search = "";
 let statusFilter = "TUTTI";
 let expandedId = null;
 let expandedDate = null;
-let currentView = "registra";
+let currentView = "home";
 let registerDate = todayISO(0);
 let registerSearch = "";
 
@@ -976,6 +1015,17 @@ function toggleAttendanceDate(id, date){
   else p.attendance[date] = 1;
   saveData(); render();
 }
+function atletaHtmlFor(p){
+  const g = gruppoDi(p), anno = annoDi(p) || "";
+  return `<div class="present-days" style="margin-top:12px;"><div class="present-days-title">Anno di nascita e gruppo</div>
+    <div style="display:flex; align-items:center; gap:8px; margin:8px 0;">
+      <span style="font-weight:700;">Anno</span>
+      <input type="number" inputmode="numeric" data-aanno="${p.id}" value="${anno}" placeholder="es. 2016" style="width:96px; padding:8px; border:1px solid var(--border); border-radius:10px; font-size:14px;">
+    </div>
+    <div class="sr-chips" style="margin-bottom:4px;">${["cuccioli","baby","superbaby"].map(x=>`<button class="sr-chip ${g===x?"on":""}" data-agr="${p.id}|${x}" style="font-size:12px; padding:9px 2px; white-space:nowrap;">${GRUPPO_NOME[x]}</button>`).join("")}</div>
+    <div style="font-size:11.5px; color:var(--ink-soft);">${p.gruppo ? "Gruppo scelto a mano (tocca di nuovo per tornare automatico)" : "Gruppo automatico dall'anno di nascita"}</div>
+  </div>`;
+}
 function versamentiHtmlFor(p){
   const vers = (p.versamenti||[]).slice().sort((a,b)=> a.d < b.d ? 1 : a.d > b.d ? -1 : 0);
   const somma = vers.reduce((t,v)=>t+(Number(v.eur)||0), 0);
@@ -1015,14 +1065,17 @@ function requestDeletePerson(id){
   deletePendingTimer = setTimeout(()=>{ deletePendingId=null; render(); }, 3500);
 }
 
-function addPerson(cognome, nome){
+function addPerson(cognome, nome, anno){
   cognome = (cognome||"").trim().toUpperCase();
   nome = (nome||"").trim().toUpperCase();
   const errEl = document.getElementById("addError");
   if(!cognome || !nome){ errEl.classList.add("show"); return; }
   errEl.classList.remove("show");
   const nextId = people.length ? Math.max(...people.map(p=>p.id))+1 : 1;
-  people.push({ id: nextId, cognome, nome, attendance:{}, pagato:0 });
+  const nuovo = { id: nextId, cognome, nome, attendance:{}, pagato:0 };
+  const a = Number(String(anno||"").trim());
+  if(a>=1990 && a<=2100) nuovo.anno = a;
+  people.push(nuovo);
   saveData(); render();
 }
 
@@ -1122,7 +1175,7 @@ function renderPeopleList(){
           <div class="avatar">${initials(p.cognome,p.nome)}</div>
           <div class="name-block">
             <div class="name">${p.cognome} ${p.nome}</div>
-            <div class="sub">${consumati} pasti · €${p.pagato}${skiTot(p)?` · ski €${skiTot(p)}`:""}</div>
+            <div class="sub">${consumati} pasti · €${p.pagato}${skiTot(p)?` · ski €${skiTot(p)}`:""}${gruppoDi(p)?` · ${GRUPPO_NOME[gruppoDi(p)]}${annoDi(p)?" "+annoDi(p):""}`:""}</div>
           </div>
           <div class="badge ${st.code}">${st.label}</div>
           <svg class="chevron ${isOpen?"open":""}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
@@ -1130,6 +1183,7 @@ function renderPeopleList(){
         <div class="card-body ${isOpen?"open":""}">
           <div class="status-banner ${st.code}">${st.detail}</div>
           ${versamentiHtmlFor(p)}
+          ${atletaHtmlFor(p)}
           <button class="delete-btn ${deletePendingId===p.id?"confirm":""}" data-delete="${p.id}">${deletePendingId===p.id ? "⚠️ Tocca di nuovo per confermare" : "🗑 Cancella persona"}</button>
           ${presentDaysHtml}
           ${skiHtmlFor(p)}
@@ -1148,6 +1202,21 @@ function renderPeopleList(){
     const p = people.find(x=>x.id===Number(pid));
     if(!p) return;
     p.skiLog = (p.skiLog||[]).filter(x=>x.id!==eid);
+    saveData(); render();
+  }));
+  container.querySelectorAll("[data-aanno]").forEach(inp=>inp.addEventListener("change", ()=>{
+    const p = people.find(x=>x.id===Number(inp.dataset.aanno));
+    if(!p) return;
+    const n = Number(String(inp.value).trim());
+    if(n>=1990 && n<=2100) p.anno = n; else delete p.anno;
+    delete p.gruppo;
+    saveData(); render();
+  }));
+  container.querySelectorAll("[data-agr]").forEach(b=>b.addEventListener("click", ()=>{
+    const [pid, g] = b.dataset.agr.split("|");
+    const p = people.find(x=>x.id===Number(pid));
+    if(!p) return;
+    if(p.gruppo===g) delete p.gruppo; else p.gruppo = g;
     saveData(); render();
   }));
   container.querySelectorAll("[data-vadd]").forEach(b=>b.addEventListener("click", ()=>{
@@ -1318,8 +1387,16 @@ function renderSeasonChips(){
 function render(){
   renderSeasonChips();
   computeSummary();
-  ["registra","persone","giorni","attrezzatura","skiroom","rubrica","gare"].forEach(v=>{ document.getElementById(v+"View").style.display = currentView===v ? "block" : "none"; });
-  if(currentView==="registra") renderRegisterList();
+  ["home","registra","persone","giorni","attrezzatura","skiroom","rubrica","gare"].forEach(v=>{ document.getElementById(v+"View").style.display = currentView===v ? "block" : "none"; });
+  const inHome = currentView==="home", inPranzi = currentView==="registra" || currentView==="giorni";
+  document.getElementById("backBar").style.display = inHome ? "none" : "";
+  document.getElementById("backTitle").textContent = { registra:"Pranzi", giorni:"Pranzi", persone:"Atleti", attrezzatura:"Schede", skiroom:"Ski room", rubrica:"Rubrica", gare:"Gare" }[currentView] || "";
+  document.getElementById("pranziTabs").style.display = inPranzi ? "" : "none";
+  document.getElementById("statsBox").style.display = inPranzi ? "" : "none";
+  document.getElementById("seasonBlock").style.display = ["registra","giorni","persone","skiroom"].includes(currentView) ? "block" : "none";
+  document.querySelector(".footer").style.display = inHome ? "" : "none";
+  if(currentView==="home"){ }
+  else if(currentView==="registra") renderRegisterList();
   else if(currentView==="persone"){ renderChips(); renderPeopleList(); }
   else if(currentView==="giorni") renderDaysList();
   else if(currentView==="attrezzatura") renderSchede();
@@ -1330,9 +1407,14 @@ function render(){
 
 function setTab(tab){
   currentView = tab;
-  [["tabRegistra","registra"],["tabPersone","persone"],["tabGiorni","giorni"],["tabSci","attrezzatura"],["tabSkiroom","skiroom"],["tabRubrica","rubrica"],["tabGare","gare"]].forEach(([id,v])=> document.getElementById(id).classList.toggle("active", tab===v));
+  [["tabRegistra","registra"],["tabPersone","persone"],["tabGiorni","giorni"],["tabSci","attrezzatura"],["tabSkiroom","skiroom"],["tabRubrica","rubrica"],["tabGare","gare"],["ptRegistra","registra"],["ptGiorni","giorni"]].forEach(([id,v])=> document.getElementById(id).classList.toggle("active", tab===v));
   render();
+  window.scrollTo(0, 0);
 }
+document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click", ()=>setTab(b.dataset.go)));
+document.getElementById("backBtn").addEventListener("click", ()=>setTab("home"));
+document.getElementById("ptRegistra").addEventListener("click", ()=>setTab("registra"));
+document.getElementById("ptGiorni").addEventListener("click", ()=>setTab("giorni"));
 document.getElementById("tabRegistra").addEventListener("click", ()=>setTab("registra"));
 document.getElementById("tabPersone").addEventListener("click", ()=>setTab("persone"));
 document.getElementById("tabGiorni").addEventListener("click", ()=>setTab("giorni"));
@@ -1349,7 +1431,8 @@ const SK_FIELDS = [
   ["slalomModello","Sci slalom · modello","text"],
   ["slalomLunghezza","Sci slalom · lunghezza (cm)","decimal"],
   ["giganteModello","Sci gigante · modello","text"],
-  ["giganteLunghezza","Sci gigante · lunghezza (cm)","decimal"]
+  ["giganteLunghezza","Sci gigante · lunghezza (cm)","decimal"],
+  ["obiettivo","Obiettivo","area"]
 ];
 // vecchi campi "sci" (modello/altezza unici): si vedono solo se compilati, per spostare i valori e poi svuotarli
 const SK_VECCHI = [
@@ -1363,6 +1446,7 @@ function skSummary(x){
   if(x.slalomLunghezza) a.push("slalom " + x.slalomLunghezza);
   if(x.giganteLunghezza) a.push("gigante " + x.giganteLunghezza);
   if(x.sciAltezza) a.push("sci " + x.sciAltezza + " cm");
+  if(x.obiettivo) a.push("🎯 " + x.obiettivo.replace(/\s+/g, " ").slice(0, 40) + (x.obiettivo.length > 40 ? "…" : ""));
   return a.length ? a.join(" · ") : "da compilare";
 }
 function renderSchede(){
@@ -1383,7 +1467,7 @@ function renderSchede(){
     const open = skOpen===x.id;
     let body = "";
     if(open){
-      body = '<div class="sk-body">' + SK_FIELDS.concat((x.sciModello || x.sciAltezza) ? SK_VECCHI : []).map(f=>`<label class="sk-lbl">${f[1]}</label><input class="sk-in" data-id="${x.id}" data-f="${f[0]}" inputmode="${f[2]}" value="${skEsc(x[f[0]])}">`).join("")
+      body = '<div class="sk-body">' + SK_FIELDS.concat((x.sciModello || x.sciAltezza) ? SK_VECCHI : []).map(f=> f[2]==="area" ? `<label class="sk-lbl">${f[1]}</label><textarea class="sk-in" rows="4" data-id="${x.id}" data-f="${f[0]}" placeholder="Scrivi qui l'obiettivo del ragazzo…" style="resize:vertical;">${skEsc(x[f[0]])}</textarea>` : `<label class="sk-lbl">${f[1]}</label><input class="sk-in" data-id="${x.id}" data-f="${f[0]}" inputmode="${f[2]}" value="${skEsc(x[f[0]])}">`).join("")
         + `<button class="reset-btn sk-del" data-del="${x.id}">${skDelPending===x.id ? "Tocca di nuovo per eliminare" : "🗑 Elimina scheda"}</button></div>`;
     }
     return `<div class="sk-card"><button class="sk-head" data-open="${x.id}"><div><div class="sk-name">${skEsc(x.nome)}</div><div class="sk-sub">${skEsc(skSummary(x))}</div></div><span>${open?"⌃":"⌄"}</span></button>${body}</div>`;
@@ -1425,7 +1509,7 @@ document.getElementById("skAddSave").addEventListener("click", ()=>{
   if(!nome){ err.classList.add("show"); return; }
   err.classList.remove("show");
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-  schede().push({ id, nome, scarpMisura:"", scarpModello:"", scarpDurezza:"", slalomModello:"", slalomLunghezza:"", giganteModello:"", giganteLunghezza:"" });
+  schede().push({ id, nome, scarpMisura:"", scarpModello:"", scarpDurezza:"", slalomModello:"", slalomLunghezza:"", giganteModello:"", giganteLunghezza:"", obiettivo:"" });
   inp.value = ""; document.getElementById("skAddForm").classList.remove("open");
   skSearch = ""; document.getElementById("skSearch").value = "";
   skOpen = id; saveData(); renderSchede();
@@ -2106,7 +2190,8 @@ document.getElementById("addToggle").addEventListener("click", ()=>{
   document.getElementById("addForm").classList.toggle("open");
 });
 document.getElementById("addSave").addEventListener("click", ()=>{
-  addPerson(document.getElementById("addCognome").value, document.getElementById("addNome").value);
+  addPerson(document.getElementById("addCognome").value, document.getElementById("addNome").value, document.getElementById("addAnno").value);
+  document.getElementById("addAnno").value = "";
   document.getElementById("addCognome").value = "";
   document.getElementById("addNome").value = "";
   document.getElementById("addForm").classList.remove("open");
@@ -2180,6 +2265,7 @@ function mergeState(b, l, r){
         const bv = bp.attendance[d]===1, lv = lp.attendance[d]===1;
         if(bv!==lv){ if(lv) rp.attendance[d] = 1; else delete rp.attendance[d]; }
       });
+      ["anno","gruppo"].forEach(f=>{ if(JSON.stringify(lp[f])!==JSON.stringify(bp[f])){ if(lp[f]===undefined) delete rp[f]; else rp[f] = lp[f]; } });
       { const bv = bp.versamenti||[], lv = lp.versamenti||[];
         if(lv.length || bv.length){
           rp.versamenti = rp.versamenti||[];
