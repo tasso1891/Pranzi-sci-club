@@ -1523,7 +1523,8 @@ function render(){
   document.getElementById("statsBox").style.display = inPranzi ? "" : "none";
   document.getElementById("seasonBlock").style.display = ["registra","giorni","persone","skiroom","attrezzatura","gare"].includes(currentView) ? "block" : "none";
   { const solo = ["attrezzatura","gare"].includes(currentView);
-    ["seasonAddToggle","seasonBtns","seasonForm"].forEach(i=>{ const e = document.getElementById(i); if(e) e.style.display = solo ? "none" : ""; });
+    ["seasonAddToggle","seasonForm"].forEach(i=>{ const e = document.getElementById(i); if(e) e.style.display = "none"; });   // "Nuova stagione" solo dalla home
+    { const e = document.getElementById("seasonBtns"); if(e) e.style.display = solo ? "none" : ""; }
     const b = document.getElementById("roBanner");
     if(solo && vistaArchivio()){
       const st = seasons.find(x=>x.id===currentSeasonId);
