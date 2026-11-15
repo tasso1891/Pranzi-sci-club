@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Sci Club — Registro Pranzi</title>
+<title>Sci Club Limone</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#14306B">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -37,6 +37,10 @@
   header::after{ content:""; position:absolute; top:-30px; right:-30px; width:140px; height:140px; border-radius:50%; border:2px dashed var(--blue); opacity:0.5; }
   .eyebrow{ font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--yellow); font-weight:700; }
   h1{ font-size:24px; font-weight:800; color:#fff; margin:2px 0 0; }
+  .logo-row{ display:flex; align-items:center; gap:12px; position:relative; }
+  .logo-row img{ width:56px; height:56px; border-radius:50%; background:#fff; flex:none; box-shadow:0 2px 8px rgba(0,0,0,0.25); }
+  .logo-row h1, .logo-row h2{ margin:0; }
+  .lbox .logo-row{ margin-bottom:16px; }
   .stats{ display:flex; gap:10px; margin-top:14px; position:relative; }
   .stat{ flex:1; background:rgba(255,255,255,0.1); border-radius:14px; padding:9px 11px; }
   .stat .num{ font-size:19px; font-weight:800; color:#fff; font-variant-numeric: tabular-nums;}
@@ -239,7 +243,7 @@
 </head>
 <body>
 <div id="login"><div class="lbox">
-  <div class="eyebrow">Sci Club</div><h2>Registro Pranzi</h2>
+  <div class="logo-row"><img src="icon-192.png" alt="Sci Club Limone"><h2>Sci Club Limone</h2></div>
   <input id="loginEmail" type="email" placeholder="Email" autocomplete="username">
   <input id="loginPass" type="password" placeholder="Password" autocomplete="current-password">
   <div class="form-error show" id="loginErr" style="min-height:16px"></div>
@@ -247,8 +251,7 @@
 </div></div>
 
 <header>
-  <div class="eyebrow">Sci Club</div>
-  <h1>Registro Pranzi</h1>
+  <div class="logo-row"><img src="icon-192.png" alt="Sci Club Limone"><h1>Sci Club Limone</h1></div>
   <div class="stats" id="statsBox">
     <div class="stat"><div class="num" id="statPasti">0</div><div class="lbl">pasti totali</div></div>
     <div class="stat"><div class="num" id="statPagato">€0</div><div class="lbl">incassato</div></div>
