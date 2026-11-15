@@ -2171,7 +2171,7 @@ document.getElementById("rbList").addEventListener("click", e=>{
   if(call || wa){
     const c = rubrica().find(x=>x.id===(call||wa).dataset[call ? "rbcall" : "rbwa"]);
     if(!c) return;
-    if(call) location.href = "tel:" + String(c.tel).replace(/[^\d+]/g, "");
+    if(call) location.href = "tel:" + String(c.tel).replace(/[^\d+]/g, "").replace(/^00/, "+");
     else window.open("https://wa.me/" + rbNumeroWa(c.tel), "_blank");
     return;
   }
