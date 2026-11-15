@@ -270,6 +270,20 @@
     <button class="home-btn" data-go="skiroom"><span class="ico">🎿</span><b>Ski room</b><small>sciolina e lamine</small></button>
     <button class="home-btn" data-go="rubrica"><span class="ico">📇</span><b>Rubrica</b><small>contatti</small></button>
     <button class="home-btn" data-go="gare"><span class="ico">🏁</span><b>Gare</b><small>calendario</small></button>
+    <button class="home-btn" id="homeNuovaStag" style="grid-column:1 / -1; flex-direction:row; justify-content:center; padding:14px; gap:10px;"><span class="ico" style="font-size:26px;">🆕</span><b>Nuova stagione</b></button>
+  </div>
+</div>
+
+<div id="nsOverlay" style="display:none; position:fixed; inset:0; z-index:60; background:rgba(15,27,61,.6); align-items:center; justify-content:center; padding:18px;">
+  <div style="background:#fff; border-radius:18px; padding:20px; width:100%; max-width:380px; max-height:88vh; overflow:auto;">
+    <h2 style="margin:0 0 10px; color:var(--blue-dark); font-size:20px;">Nuova stagione</h2>
+    <input id="nsLabel" placeholder="Es. 2027/28" style="width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border); font-size:16px; margin-bottom:10px;">
+    <div id="nsInfo" style="font-size:13px; color:var(--ink); line-height:1.5;"></div>
+    <div id="nsErr" style="font-size:13px; color:var(--red); min-height:16px; margin-top:6px;"></div>
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button id="nsNo" style="flex:1; padding:12px 0; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--ink-soft); font-weight:800;">Annulla</button>
+      <button id="nsSi" style="flex:1; padding:12px 0; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:800;">Crea stagione</button>
+    </div>
   </div>
 </div>
 
@@ -282,7 +296,7 @@
 <div style="margin:8px 16px 0;"><button class="reset-btn" id="seasonDelBtn">🗑 Elimina stagione</button> <button class="reset-btn" id="seasonFillBtn" title="Rimette in elenco i 36 atleti">↻ Ricompila elenco</button></div>
 <div class="season-form" id="seasonForm">
   <input id="seasonLabelInput" placeholder="Es. 2026/27">
-  <div style="font-size:13px; color:var(--ink-soft); margin-bottom:10px;">La nuova stagione parte sempre con l'elenco atleti, con pasti e pagamenti azzerati.</div>
+  <div style="font-size:13px; color:var(--ink-soft); margin-bottom:10px;">La nuova stagione copia gli atleti di quella attuale (tranne i più grandi), con pasti, versamenti e Ski room azzerati.</div>
   <div class="form-error" id="seasonError">Inserisci un nome per la stagione.</div>
   <div class="season-status" id="seasonStatus"></div>
   <button class="save" id="seasonCreateBtn">Crea stagione</button>
@@ -573,7 +587,15 @@ const ANNI_LISTA = [2015,2015,2015,2015,2015,2015,2015, 2016,2016,2016,2016,2016
 const ANNI_PER_NOME = {};
 function normNome(t){ return String(t||"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/['’`´]/g,"").replace(/\s+/g," ").trim(); }
 function annoDi(p){ return Number(p.anno) || ANNI_PER_NOME[normNome(p.cognome + " " + p.nome)] || 0; }
-function gruppoDiAnno(a){ return (a===2015 || a===2016) ? "cuccioli" : (a===2017 || a===2018) ? "baby" : (a===2019 || a===2020) ? "superbaby" : ""; }
+function annoInizioStagione(id){
+  const st = seasons.find(x=>x.id===id), m = st && /(\d{4})/.exec(st.label || "");
+  return m ? Number(m[1]) : 2026;
+}
+// i gruppi scorrono di un anno a ogni stagione (2026/27: cuccioli 2015/16, baby 2017/18, superbaby 2019/20)
+function gruppoDiAnno(a){
+  a = a - Math.max(0, annoInizioStagione(currentSeasonId) - 2026);
+  return (a===2015 || a===2016) ? "cuccioli" : (a===2017 || a===2018) ? "baby" : (a===2019 || a===2020) ? "superbaby" : "";
+}
 function gruppoDi(p){ return p.gruppo || gruppoDiAnno(annoDi(p)); }
 const GRUPPO_NOME = { cuccioli:"Cuccioli", baby:"Baby", superbaby:"Superbaby" };
 function gruppoScheda(x){
@@ -1009,6 +1031,65 @@ function ricompilaElenco(){
   expandedId = null; expandedDate = null;
   saveData(); render();
 }
+// nuova stagione: copia gli atleti dell'ultima stagione (senza pasti, versamenti e ski room) togliendo i più grandi
+function esc(t){ return String(t).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function proponiStagione(){
+  const m = /(\d{4})\s*[\/\-]\s*(\d{2,4})/.exec((seasons[seasons.length-1] || {}).label || "");
+  if(!m) return "";
+  const a = Number(m[1]) + 1, b = String(Number(m[2].slice(-2)) + 1).padStart(2, "0").slice(-2);
+  return a + "/" + b;
+}
+function annoNuovaStagione(label){
+  const m = /(\d{4})/.exec(label || ""); return m ? Number(m[1]) : 0;
+}
+function pianoNuovaStagione(label){
+  appState.data[currentSeasonId] = people;
+  const ultima = seasons[seasons.length-1];
+  const src = (appState.data[ultima.id] || []).slice().sort((a,b)=>a.cognome.localeCompare(b.cognome) || a.nome.localeCompare(b.nome));
+  const inizio = annoNuovaStagione(label), taglio = inizio ? inizio - 11 : 0;   // 2027/28 → via i nati nel 2015 e prima
+  const restano = [], escono = [], senzaAnno = [];
+  src.forEach(p=>{
+    const a = annoDi(p);
+    if(a && taglio && a < taglio) escono.push(p);
+    else { restano.push(p); if(!a) senzaAnno.push(p); }
+  });
+  const credito = src.filter(p=>(p.pagato||0) - pastiConsumati(p)*PREZZO_PASTO - skiTot(p) > 0);
+  const debito = src.filter(p=>(p.pagato||0) - pastiConsumati(p)*PREZZO_PASTO - skiTot(p) < 0);
+  const somma = L => L.reduce((t,p)=>t + Math.abs((p.pagato||0) - pastiConsumati(p)*PREZZO_PASTO - skiTot(p)), 0);
+  const usciti = new Set(escono.map(p=>normNome(p.cognome + " " + p.nome)));
+  const contattiVia = (appState.rubrica || []).filter(c=>c.bambino && usciti.has(normNome(c.bambino)));
+  return { ultima, taglio, restano, escono, senzaAnno, credito, debito, contattiVia, eurCredito: somma(credito), eurDebito: somma(debito) };
+}
+function atletiNuovaStagione(piano){
+  return piano.restano.map(p=>{
+    const n = { id:p.id, cognome:p.cognome, nome:p.nome, attendance:{}, pagato:0, versamenti:[], skiLog:[] };
+    const a = annoDi(p); if(a) n.anno = a;
+    if(p.gruppo) n.gruppo = p.gruppo;
+    return n;
+  });
+}
+async function creaStagione(label){
+  label = (label||"").trim();
+  if(!label) return { ok:false, error:"Inserisci un nome per la stagione." };
+  if(seasons.some(x=>x.label===label)) return { ok:false, error:"Esiste già una stagione con questo nome." };
+  if(!STORAGE_OK) return { ok:false, error:"Memoria non disponibile in questa visualizzazione." };
+  const newId = "s" + Date.now() + Math.floor(Math.random()*1000);
+  const piano = pianoNuovaStagione(label);
+  // copia di sicurezza prima di cambiare stagione e rubrica
+  try{ if(window.cloudCopie) await window.cloudCopie.crea("prima", bkStatoTesto()); }catch(e){}
+  const prevSeasons = appState.seasons, prevRubrica = appState.rubrica;
+  appState.seasons = [...appState.seasons, { id:newId, label }];
+  appState.data[newId] = atletiNuovaStagione(piano);
+  // rubrica: tolgo i genitori dei bambini che non sono stati copiati (gli altri contatti restano)
+  const via = new Set(piano.contattiVia.map(c=>c.id));
+  if(via.size) appState.rubrica = (appState.rubrica || []).filter(c=>!via.has(c.id));
+  const result = await persistAppState();
+  if(!result.ok){ appState.seasons = prevSeasons; appState.rubrica = prevRubrica; delete appState.data[newId]; return { ok:false, error:result.error }; }
+  seasons = appState.seasons;
+  await switchSeason(newId);
+  try{ pubblicaGenitori(); }catch(e){}
+  return { ok:true, piano };
+}
 async function createSeason(label){
   label = (label||"").trim();
   const errEl = document.getElementById("seasonError");
@@ -1024,29 +1105,11 @@ async function createSeason(label){
   btn.disabled = true;
   setSeasonStatus("busy", "Creazione in corso…");
 
-  const newId = "s" + Date.now() + Math.floor(Math.random()*1000);
-  const newPeopleData = elencoAtleti();
-
-  const prevSeasons = appState.seasons;
-  const prevDataEntry = appState.data[newId];
-  appState.seasons = [...appState.seasons, { id:newId, label }];
-  appState.data[newId] = newPeopleData;
-
-  const result = await persistAppState();
-
-  if(!result.ok){
-    appState.seasons = prevSeasons;
-    if(prevDataEntry===undefined) delete appState.data[newId]; else appState.data[newId] = prevDataEntry;
-    btn.disabled = false;
-    setSeasonStatus("err", "Creazione non riuscita: " + result.error);
-    return;
-  }
-
-  seasons = appState.seasons;
+  const result = await creaStagione(label);
   btn.disabled = false;
+  if(!result.ok){ setSeasonStatus("err", "Creazione non riuscita: " + result.error); return; }
   setSeasonStatus("ok", `Stagione "${label}" creata!`);
   document.getElementById("seasonLabelInput").value = "";
-  await switchSeason(newId);
   setTimeout(()=>{
     document.getElementById("seasonForm").classList.remove("open");
     clearSeasonStatus();
@@ -2687,6 +2750,33 @@ window.addEventListener("pagehide", ()=>{ if(dirty) saveNow(); });
 
 document.getElementById("seasonAddToggle").addEventListener("click", ()=>{
   document.getElementById("seasonForm").classList.toggle("open");
+});
+function nsAggiorna(){
+  const label = document.getElementById("nsLabel").value.trim(), info = document.getElementById("nsInfo");
+  const pi = pianoNuovaStagione(label), n = x => x.map(p=>p.cognome + " " + p.nome).join(", ");
+  let h = "Copio <b>" + pi.restano.length + " atleti</b> da " + esc(pi.ultima.label) + ", con pasti, versamenti e Ski room azzerati (schede, rubrica e link dei genitori restano).";
+  if(pi.taglio) h += "<br><br><b>Escono " + pi.escono.length + " atleti</b> nati nel " + (pi.taglio-1) + " o prima" + (pi.escono.length ? ": " + esc(n(pi.escono)) : "") + ".";
+  else h += "<br><br>Scrivi l'anno della stagione (es. 2027/28) per togliere i più grandi.";
+  h += "<br><br>📇 <b>Rubrica:</b> restano " + ((appState.rubrica || []).length - pi.contattiVia.length) + " contatti" + (pi.contattiVia.length ? ", tolti " + pi.contattiVia.length + " (" + esc(pi.contattiVia.map(c=>c.nome + " di " + c.bambino).slice(0,8).join(", ")) + (pi.contattiVia.length>8 ? "…" : "") + ")" : "") + ". Allenatori e contatti senza bambino collegato restano.";
+  if(pi.senzaAnno.length) h += "<br><br>⚠️ Senza anno di nascita (restano in elenco): " + esc(n(pi.senzaAnno)) + ".";
+  if(pi.credito.length || pi.debito.length) h += "<br><br>⚠️ <b>Il saldo non viene riportato.</b> In " + esc(pi.ultima.label) + (pi.credito.length ? " hai ancora da restituire " + pi.eurCredito + " € a " + pi.credito.length + " atleti" : "") + (pi.credito.length && pi.debito.length ? " e" : "") + (pi.debito.length ? " da incassare " + pi.eurDebito + " € da " + pi.debito.length : "") + ". La vecchia stagione resta consultabile.";
+  info.innerHTML = h;
+}
+document.getElementById("homeNuovaStag").addEventListener("click", ()=>{
+  document.getElementById("nsLabel").value = proponiStagione();
+  document.getElementById("nsErr").textContent = "";
+  document.getElementById("nsOverlay").style.display = "flex";
+  nsAggiorna();
+});
+document.getElementById("nsLabel").addEventListener("input", nsAggiorna);
+document.getElementById("nsNo").addEventListener("click", ()=>{ document.getElementById("nsOverlay").style.display = "none"; });
+document.getElementById("nsSi").addEventListener("click", async ()=>{
+  const b = document.getElementById("nsSi"); b.disabled = true; document.getElementById("nsErr").textContent = "Creazione in corso…";
+  const r = await creaStagione(document.getElementById("nsLabel").value);
+  b.disabled = false;
+  if(!r.ok){ document.getElementById("nsErr").textContent = r.error; return; }
+  document.getElementById("nsOverlay").style.display = "none";
+  setTab("home");
 });
 document.getElementById("seasonCreateBtn").addEventListener("click", ()=>{
   createSeason(document.getElementById("seasonLabelInput").value);
