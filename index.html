@@ -472,6 +472,7 @@
   </div>
   <div id="gaPdfGest" style="display:flex; flex-wrap:wrap; gap:8px; margin:8px 16px 0;">
     <button class="quick-day-btn" id="gaPdfLeggi" style="flex:1 1 100%;">📥 Leggi le gare dal PDF</button>
+    <button class="quick-day-btn" id="gaSvuota" style="flex:1 1 100%;">🗑 Elimina tutto l'elenco delle gare</button>
     <label class="quick-day-btn" id="gaPdfCarica" style="flex:1; text-align:center; cursor:pointer;">➕ Carica PDF<input type="file" id="gaPdfFile" accept="application/pdf,.pdf" style="display:none;"></label>
     <button class="quick-day-btn" id="gaPdfDel" style="flex:1;">🗑 Elimina PDF</button>
   </div>
@@ -2240,13 +2241,17 @@ function calAnno(testi, fallback){
   for(const t of testi){ const m = /(20\d\d)\s*[\/\-]\s*(20)?(\d\d)\b/.exec(t); if(m) return Number(m[1]); }
   return fallback;
 }
-// pagine: [[{s,x,y}]] (y verso l'alto, come in pdf.js); ritorna la lista di gare trovate
-function calAnalizza(pagine, annoInizio){
+// pagine: [[{s,x,y}]] (y verso l'alto, come in pdf.js); rettangoli: [[{x0,y0,x1,y1,c}]] celle colorate (facoltativo)
+function calAnalizza(pagine, annoInizio, rettangoli){
   const tutti = pagine.reduce((a, p)=>a.concat(p), []).map(i=>i.s);
   const A = calAnno(tutti, annoInizio), out = [];
   const anno = m => (m >= 8 ? A : A + 1);        // set–dic = primo anno, gen–ago = secondo
-  const GIORNI = /^(Lu|Ma|Me|Gi|Ve|Sa|Do)$/i;
-  pagine.forEach(pag=>{
+  const GIORNI = /^(Lun|Mar|Mer|Gio|Ven|Sab|Dom|Lu|Ma|Me|Gi|Ve|Sa|Do)$/i;
+  const IGNORA = /^(data|localit[aà]|luogo)$/i;
+  const CAT = { C:"Cuccioli", B:"Baby" };
+  pagine.forEach((pag, pi)=>{
+    // le celle colorate servono solo nei calendari con colonne «Data / Località» (celle unite per le gare su più giorni)
+    const rects = (rettangoli && rettangoli[pi] && pag.some(i=>/^localit[aà]$/i.test(String(i.s).trim()))) ? rettangoli[pi] : [];
     const it = pag.map(i=>({ s:String(i.s).trim(), x:i.x, y:i.y })).filter(i=>i.s);
     // giorni: numero + sigla del giorno sulla stessa riga
     const giorni = [];
@@ -2263,48 +2268,105 @@ function calAnalizza(pagine, annoInizio){
     const cols = soglie.map((s, k)=>({ k, x0: Math.min(...giorni.filter(g=>g.k===k).map(g=>g.x)) })).sort((a, b)=>a.x0 - b.x0);
     const mesi = it.filter(i=>CAL_MESI.includes(i.s.toUpperCase())).sort((a, b)=>a.x - b.x);
     if(mesi.length !== cols.length) return;
+    const yIntest = Math.max(...mesi.map(m=>m.y));
     cols.forEach((c, ci)=>{
       c.mese = CAL_MESI.indexOf(mesi[ci].s.toUpperCase());
       c.x1 = ci + 1 < cols.length ? cols[ci + 1].x0 - 2 : 1e9;
       c.giorni = giorni.filter(g=>g.k===c.k).sort((a, b)=>b.y - a.y);
-    });
-    // testi degli eventi
-    const righe = {};   // "colonna|giorno" -> [{s,x,y}]
-    it.forEach(t=>{
-      if(/^\d{1,2}$/.test(t.s) || GIORNI.test(t.s) || CAL_MESI.includes(t.s.toUpperCase()) || /stagione/i.test(t.s)) return;
-      const c = cols.find(c=>t.x >= c.x0 - 2 && t.x < c.x1);
-      if(!c) return;
-      // la riga del giorno è quella più vicina in altezza (le celle alte hanno il numero al centro)
-      let g = null;
-      c.giorni.forEach(d=>{ const diff = Math.abs(d.y - t.y); if(g === null || diff < g.diff) g = { d, diff }; });
-      if(!g) return;
-      const k = c.mese + "|" + g.d.n;
-      (righe[k] = righe[k] || []).push(t);
-    });
-    // per ogni giorno, righe di testo separate (stessa altezza = stessa riga, ordinate per x)
-    const perGiorno = [];
-    Object.keys(righe).forEach(k=>{
-      const [m, d] = k.split("|").map(Number), blocchi = [];
-      righe[k].sort((a, b)=>b.y - a.y || a.x - b.x).forEach(t=>{
-        const b = blocchi.find(b=>Math.abs(b.y - t.y) <= 3);
-        if(b) b.t.push(t.s); else blocchi.push({ y:t.y, t:[t.s] });
+      c.giorni.forEach((g, i, L)=>{            // fascia verticale di ogni giorno (le righe alte hanno il numero al centro)
+        const su = i > 0 ? (L[i-1].y + g.y) / 2 : g.y + (L.length > 1 ? (g.y - L[1].y) / 2 : 6);
+        const giu = i < L.length - 1 ? (g.y + L[i+1].y) / 2 : g.y - (L.length > 1 ? (L[i-1 < 0 ? 0 : i-1].y - g.y) / 2 : 6);
+        g.su = su; g.giu = giu;
       });
-      blocchi.forEach(b=>perGiorno.push({ m, d, testo: b.t.join(" ").replace(/\s+/g, " ") }));
     });
-    // stesso testo in giorni consecutivi = un'unica gara su più giorni
-    const gruppi = {};
-    perGiorno.forEach(e=>{ (gruppi[e.m + "|" + e.testo.toLowerCase()] = gruppi[e.m + "|" + e.testo.toLowerCase()] || []).push(e); });
-    Object.values(gruppi).forEach(L=>{
-      L.sort((a, b)=>a.d - b.d);
-      let inizio = L[0], prec = L[0];
-      const chiudi = (e0, e1)=> out.push(calEvento(calIso(anno(e0.m), e0.m, e0.d), e1.d !== e0.d ? calIso(anno(e1.m), e1.m, e1.d) : "", calTitolo(e0.testo)));
-      for(let i = 1; i < L.length; i++){
-        if(L[i].d === prec.d + 1){ prec = L[i]; continue; }
-        chiudi(inizio, prec); inizio = prec = L[i];
+    // elementi di testo per colonna: prefissi (1-2 lettere vicino al numero) e righe di contenuto
+    const perCol = cols.map(()=>({ pre:[], cont:[] }));
+    it.forEach(t=>{
+      if(/^\d{1,2}$/.test(t.s) || GIORNI.test(t.s) || CAL_MESI.includes(t.s.toUpperCase()) || IGNORA.test(t.s) || /stagione|calendario/i.test(t.s) || t.y > yIntest + 2) return;
+      const ci = cols.findIndex(c=>t.x >= c.x0 - 2 && t.x < c.x1);
+      if(ci < 0) return;
+      const c = cols[ci];
+      if(/^[A-Za-z]{1,2}$/.test(t.s) && t.x >= c.x0 + 25 && t.x <= c.x0 + 50 && !/^(Lu|Ma|Me|Gi|Ve|Sa|Do)$/i.test(t.s)) perCol[ci].pre.push(t);
+      else perCol[ci].cont.push(t);
+    });
+    const unisci = L=>L.filter((t, i)=>i === 0 || t.toLowerCase() !== L[i-1].toLowerCase()).join(" ");
+    const riga = (c, y)=>{ let g = null; c.giorni.forEach(d=>{ const df = Math.abs(d.y - y); if(g === null || df < g.df) g = { d, df }; }); return g && g.d; };
+    // regione colorata (celle unite = rettangoli uguali e adiacenti)
+    const regione = (x, y)=>{
+      const dentro = rects.filter(r=>x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1 && r.c.toLowerCase() !== "#ffffff");
+      if(!dentro.length) return null;
+      dentro.sort((a, b)=>(a.x1 - a.x0) * (a.y1 - a.y0) - (b.x1 - b.x0) * (b.y1 - b.y0));
+      const r0 = dentro[0], stessa = r=>r.c === r0.c && Math.abs(r.x0 - r0.x0) < 1.5 && Math.abs(r.x1 - r0.x1) < 1.5;
+      let y0 = r0.y0, y1 = r0.y1, cresciuto = true;
+      while(cresciuto){
+        cresciuto = false;
+        rects.forEach(r=>{ if(stessa(r)){ if(r.y1 >= y0 - 1.5 && r.y1 <= y1 + 1.5 && r.y0 < y0 - 0.5){ y0 = r.y0; cresciuto = true; } if(r.y0 <= y1 + 1.5 && r.y0 >= y0 - 1.5 && r.y1 > y1 + 0.5){ y1 = r.y1; cresciuto = true; } } });
       }
-      chiudi(inizio, prec);
+      return { id: r0.c + "|" + Math.round(r0.x0) + "|" + Math.round(y0) + "|" + Math.round(y1), y0, y1 };
+    };
+    const giorniDi = (c, reg, daRiga)=>{
+      if(!reg) return [daRiga];
+      const L = c.giorni.filter(d=>Math.min(reg.y1, d.su) - Math.max(reg.y0, d.giu) >= 0.3 * (d.su - d.giu));
+      return L.length ? L : [daRiga];
+    };
+    cols.forEach((c, ci)=>{
+      // righe di testo (stessa altezza = stessa riga), ognuna con il suo eventuale prefisso
+      const righe = [];
+      perCol[ci].cont.sort((a, b)=>b.y - a.y || a.x - b.x).forEach(t=>{
+        const r = righe.find(r=>Math.abs(r.y - t.y) <= 3);
+        if(r){ r.t.push(t.s); r.x1 = Math.max(r.x1, t.x); } else righe.push({ y:t.y, t:[t.s], x0:t.x, x1:t.x });
+      });
+      righe.forEach(r=>{
+        r.testo = r.t.join(" ").replace(/\s+/g, " ");
+        const p = perCol[ci].pre.find(p=>Math.abs(p.y - r.y) <= 3);
+        r.pre = p ? p.s : "";
+        r.giorno = riga(c, r.y);
+        r.reg = regione(r.x0 + 2, r.y + 2) || regione(r.x0 + 2, r.y);
+      });
+      const eventi = [];
+      const usate = new Set();
+      // 1) righe con sigla di 2 lettere (SL, GS, GK…): una gara per riga
+      righe.forEach((r, i)=>{
+        if(r.pre.length === 2){ usate.add(i); eventi.push({ giorni:[r.giorno], testo:r.pre.toUpperCase() + " " + r.testo }); }
+      });
+      // 2) righe con C / B: il testo è condiviso nel blocco, ogni riga è una categoria nel suo giorno
+      righe.forEach((r, i)=>{
+        if(usate.has(i) || r.pre.length !== 1) return;
+        const blocco = righe.map((x, k)=>({ x, k })).filter(({ x, k })=>!usate.has(k) && x.pre.length <= 1 && (r.reg ? (x.reg && x.reg.id === r.reg.id) : x === r));
+        const testo = unisci(blocco.map(b=>b.x.testo));
+        blocco.forEach(({ x, k })=>{
+          usate.add(k);
+          if(x.pre) eventi.push({ giorni:[x.giorno], testo: testo + " – " + (CAT[x.pre.toUpperCase()] || x.pre.toUpperCase()) });
+        });
+      });
+      // 3) righe senza sigla: un'unica gara se stanno nella stessa cella colorata
+      righe.forEach((r, i)=>{
+        if(usate.has(i)) return;
+        const blocco = righe.map((x, k)=>({ x, k })).filter(({ x, k })=>!usate.has(k) && (r.reg ? (x.reg && x.reg.id === r.reg.id) : x === r));
+        blocco.forEach(({ k })=>usate.add(k));
+        eventi.push({ giorni: giorniDi(c, r.reg, r.giorno), testo: unisci(blocco.map(b=>b.x.testo)) });
+      });
+      eventi.forEach(e=>{
+        const gg = e.giorni.filter(Boolean).map(d=>d.n).sort((a, b)=>a - b);
+        if(gg.length) out.push({ m:c.mese, d0:gg[0], d1:gg[gg.length - 1], testo:e.testo });
+      });
     });
   });
+  // stesso testo in giorni consecutivi (senza celle colorate) = un'unica gara su più giorni
+  const gruppi = {};
+  out.forEach(e=>{ const k = e.m + "|" + e.testo.toLowerCase(); (gruppi[k] = gruppi[k] || []).push(e); });
+  const finali = [];
+  Object.values(gruppi).forEach(L=>{
+    L.sort((a, b)=>a.d0 - b.d0);
+    let cur = L[0];
+    for(let i = 1; i < L.length; i++){
+      if(L[i].d0 <= cur.d1 + 1){ cur.d1 = Math.max(cur.d1, L[i].d1); continue; }
+      finali.push(cur); cur = L[i];
+    }
+    finali.push(cur);
+  });
+  out.length = 0;
+  finali.forEach(e=>out.push(calEvento(calIso(anno(e.m), e.m, e.d0), e.d1 !== e.d0 ? calIso(anno(e.m), e.m, e.d1) : "", calTitolo(e.testo))));
   if(out.length) return out.sort((a, b)=>a.d < b.d ? -1 : a.d > b.d ? 1 : a.titolo.localeCompare(b.titolo));
   // alternativa: elenco di righe "18-20 dicembre Nome" oppure "06/01/2027 Nome"
   const righeT = [];
@@ -2326,17 +2388,57 @@ function calAnalizza(pagine, annoInizio){
   });
   return out.sort((a, b)=>a.d < b.d ? -1 : a.d > b.d ? 1 : a.titolo.localeCompare(b.titolo));
 }
+// celle colorate della pagina (da getOperatorList di pdf.js, vecchio e nuovo formato)
+function calRettangoli(ol, OPS){
+  const out = []; let col = "#000000", bb = null;
+  const hex = a=>typeof a[0] === "string" ? a[0] : "#" + [a[0], a[1], a[2]].map(v=>Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+  const box = (b, x, y)=>{ if(!b) return { x0:x, y0:y, x1:x, y1:y }; b.x0 = Math.min(b.x0, x); b.y0 = Math.min(b.y0, y); b.x1 = Math.max(b.x1, x); b.y1 = Math.max(b.y1, y); return b; };
+  const PITTURA = [OPS.fill, OPS.eoFill, OPS.fillStroke, OPS.eoFillStroke];
+  const salva = ()=>{ if(bb && bb.x1 - bb.x0 > 2 && bb.y1 - bb.y0 > 2 && bb.x1 - bb.x0 < 700 && bb.y1 - bb.y0 < 400) out.push({ x0:bb.x0, y0:bb.y0, x1:bb.x1, y1:bb.y1, c:col }); bb = null; };
+  for(let i = 0; i < ol.fnArray.length; i++){
+    const f = ol.fnArray[i], a = ol.argsArray[i];
+    if(f === OPS.setFillRGBColor) col = hex(a);
+    else if(f === OPS.constructPath){
+      let b = null;
+      if(typeof a[0] === "number"){          // formato nuovo: [paint, [dati], minmax]
+        const d = Array.from(a[1] && a[1][0] ? a[1][0] : []);
+        for(let k = 0; k < d.length;){
+          const op = d[k];
+          if(op === 0 || op === 1){ b = box(b, d[k+1], d[k+2]); k += 3; }
+          else if(op === 2){ b = box(b, d[k+5], d[k+6]); k += 7; }
+          else if(op === 3){ b = box(b, d[k+3], d[k+4]); k += 5; }
+          else k += 1;
+        }
+        bb = b;
+        if(PITTURA.includes(a[0])) salva(); else bb = null;
+      } else {                                // formato vecchio: [ops, coordinate], poi fill separato
+        const ops = a[0], cc = a[1]; let k = 0;
+        ops.forEach(op=>{
+          if(op === OPS.moveTo || op === OPS.lineTo){ b = box(b, cc[k], cc[k+1]); k += 2; }
+          else if(op === OPS.curveTo){ b = box(b, cc[k+4], cc[k+5]); k += 6; }
+          else if(op === OPS.curveTo2 || op === OPS.curveTo3){ b = box(b, cc[k+2], cc[k+3]); k += 4; }
+          else if(op === OPS.rectangle){ b = box(box(b, cc[k], cc[k+1]), cc[k] + cc[k+2], cc[k+1] + cc[k+3]); k += 4; }
+        });
+        bb = b;
+      }
+    }
+    else if(PITTURA.includes(f)) salva();
+    else if(f === OPS.endPath || f === OPS.stroke || f === OPS.closeStroke) bb = null;
+  }
+  return out;
+}
 
 // legge le gare dal PDF e le aggiunge al calendario (salta quelle già presenti)
 async function calLeggiGare(bytes){
   const lib = await caricaPdfJs();
   const pdf = await lib.getDocument({ data: bytes.slice() }).promise;
-  const pagine = [];
+  const pagine = [], rett = [];
   for(let n = 1; n <= pdf.numPages; n++){
-    const tc = await (await pdf.getPage(n)).getTextContent();
+    const pg = await pdf.getPage(n), tc = await pg.getTextContent();
     pagine.push(tc.items.map(i=>({ s:i.str, x:i.transform[4], y:i.transform[5] })));
+    try{ rett.push(calRettangoli(await pg.getOperatorList(), lib.OPS)); }catch(e){ rett.push([]); }
   }
-  const trovate = calAnalizza(pagine, annoNuovaStagione(seasons[seasons.length-1].label) || 2026);
+  const trovate = calAnalizza(pagine, annoNuovaStagione(seasons[seasons.length-1].label) || 2026, rett);
   const lista = gareLive();
   const parole = t=>String(t).toLowerCase().replace(/[^a-zà-ÿ0-9 ]/g, " ").split(/\s+/).filter(w=>w.length >= 5);
   const gia = e=>lista.some(x=>x.d <= e.d && e.d <= (x.a || x.d) && (x.titolo.toLowerCase()===e.titolo.toLowerCase() || parole(x.titolo).some(w=>parole(e.titolo).includes(w))));
@@ -2379,8 +2481,29 @@ async function calPdfLeggi(){
 // PDF del calendario: statico (quello originale nel sito), caricato dall'app, oppure nessuno
 function calPdfLive(){ return appState.calPdf || { tipo:"statico" }; }
 function calPdfVista(){ if(!vistaArchivio()) return calPdfLive(); const a = (appState.arch || {})[currentSeasonId]; return (a && a.calPdf) || { tipo:"statico" }; }
-let calDelPending = false, calDelTimer = null;
+let calDelPending = false, calDelTimer = null, gaSvuotaPending = false, gaSvuotaTimer = null;
+function gaSvuotaUI(){
+  const b = document.getElementById("gaSvuota"), n = gareLive().length;
+  b.style.display = n ? "" : "none";
+  b.textContent = gaSvuotaPending ? "Tocca di nuovo per eliminare " + n + " gare" : "🗑 Elimina tutto l'elenco delle gare";
+  b.style.background = gaSvuotaPending ? "var(--red)" : ""; b.style.color = gaSvuotaPending ? "#fff" : "";
+}
+function gaSvuota(){
+  if(vistaArchivio()) return;
+  if(!gaSvuotaPending){
+    gaSvuotaPending = true; gaSvuotaUI();
+    clearTimeout(gaSvuotaTimer); gaSvuotaTimer = setTimeout(()=>{ gaSvuotaPending = false; gaSvuotaUI(); }, 3500);
+    return;
+  }
+  clearTimeout(gaSvuotaTimer); gaSvuotaPending = false;
+  const n = gareLive().length;
+  appState.gare = []; gaOpen = null;
+  saveData(); renderGare();
+  pubblicaGare(true).catch(()=>{});
+  document.getElementById("gaPdfMsg").textContent = "Elenco eliminato (" + n + " gare). Il PDF resta: puoi rileggerlo con “📥 Leggi le gare dal PDF”.";
+}
 function renderCalPdf(){
+  gaSvuotaUI();
   const c = calPdfVista(), arch = vistaArchivio();
   const ha = c.tipo !== "nessuno";
   document.getElementById("gaPdfApri").style.display = ha ? "" : "none";
@@ -2523,6 +2646,7 @@ document.getElementById("gaPdfApri").addEventListener("click", ()=>{
 document.getElementById("gaPdfFile").addEventListener("change", e=>{ const f = e.target.files && e.target.files[0]; e.target.value = ""; if(f) calPdfCarica(f); });
 document.getElementById("gaPdfDel").addEventListener("click", calPdfElimina);
 document.getElementById("gaPdfLeggi").addEventListener("click", calPdfLeggi);
+document.getElementById("gaSvuota").addEventListener("click", gaSvuota);
 document.getElementById("gaPassBtn").addEventListener("click", ()=>{ gaPassate = !gaPassate; renderGare(); });
 document.getElementById("gaAddToggle").addEventListener("click", ()=> document.getElementById("gaAddForm").classList.toggle("open"));
 document.getElementById("gaAddSave").addEventListener("click", ()=>{
