@@ -136,7 +136,16 @@ def corpo(testo, oggi):
     return "\n".join(righe)
 
 
+def nel_periodo():
+    # le mail automatiche partono solo dal 1 dicembre al 25 aprile; l'invio a mano (tasto Mail) è sempre permesso
+    if os.environ.get("GITHUB_EVENT_NAME") != "schedule":
+        return True
+    oggi = datetime.date.today()
+    return (oggi.month, oggi.day) >= (12, 1) or (oggi.month, oggi.day) <= (4, 25)
+
 def main():
+    if not nel_periodo():
+        print("Fuori dal periodo 1 dicembre - 25 aprile: nessuna mail."); return
     stato = scarica()
     oggi = datetime.date.today()
     xlsx, testo = costruisci(stato)
