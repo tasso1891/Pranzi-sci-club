@@ -930,11 +930,26 @@ async function copiaTesto(txt){
 }
 let lkVisibili = [];
 function lkMsg(t){ document.getElementById("lkMsg").textContent = t; }
+function lkTestoWa(p, url){ return "Ciao! Qui puoi seguire " + p.nome.toLowerCase().replace(/(^|\s)\S/g, x=>x.toUpperCase()) + " allo Sci Club Limone: pranzi e versamenti, calendario gare, ordini di partenza e classifiche. " + url; }
+// genitori collegati al bambino in rubrica (con numero)
+function lkGenitori(p){
+  const nome = p.cognome + " " + p.nome;
+  return (appState.rubrica || []).filter(c=>c.bambino && normNome(c.bambino)===normNome(nome) && String(c.tel||"").replace(/\D/g,"").length>=6);
+}
 function lkRender(){
   const q = document.getElementById("lkCerca").value.trim().toUpperCase();
   lkVisibili = lkLista().filter(p=>!q || (p.cognome + " " + p.nome).toUpperCase().includes(q));
-  const link = appState.link || {};
-  document.getElementById("lkLista").innerHTML = lkVisibili.map((p,i)=>`<div class="bk-row"><div><div style="font-weight:700;">${p.cognome} ${p.nome}</div><div style="font-size:12px; color:var(--ink-soft);">${link[lkChiave(p)] ? "link attivo" : "nessun link"}</div></div><div style="display:flex; gap:6px;"><button class="bk-mini" data-lkc="${i}">Copia</button><button class="bk-mini" data-lkw="${i}">WhatsApp</button><button class="bk-mini" data-lkn="${i}" title="Nuovo link (il vecchio smette di funzionare)">↻</button></div></div>`).join("") || '<div style="font-size:13px; color:var(--ink-soft);">Nessun bambino trovato.</div>';
+  const link = appState.link || {}, inv = appState.linkInviati || {};
+  let manca = 0;
+  document.getElementById("lkLista").innerHTML = lkVisibili.map((p,i)=>{
+    const k = lkChiave(p), gen = lkGenitori(p);
+    if(!inv[k]) manca++;
+    const stato = (link[k] ? "link attivo" : "nessun link") + (inv[k] ? " · ✅ inviato il " + new Date(inv[k]).toLocaleDateString("it-IT") : "") + (gen.length ? "" : " · ⚠️ nessun numero in rubrica");
+    const wa = gen.length
+      ? gen.map((c,j)=>`<button class="bk-mini" data-lkw="${i}" data-lkg="${j}">WhatsApp ${esc(String(c.nome).split(" ")[0])}</button>`).join("")
+      : `<button class="bk-mini" data-lkw="${i}">WhatsApp</button>`;
+    return `<div class="bk-row"><div><div style="font-weight:700;">${esc(p.cognome)} ${esc(p.nome)}</div><div style="font-size:12px; color:var(--ink-soft);">${stato}</div></div><div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;"><button class="bk-mini" data-lkc="${i}">Copia</button>${wa}<button class="bk-mini" data-lkn="${i}" title="Nuovo link (il vecchio smette di funzionare)">↻</button></div></div>`;
+  }).join("") || '<div style="font-size:13px; color:var(--ink-soft);">Nessun bambino trovato.</div>';
 }
 function lkApri(){ lkMsg(""); document.getElementById("lkCerca").value = ""; lkRender(); document.getElementById("lkOverlay").classList.add("show"); }
 function lkChiudi(){ document.getElementById("lkOverlay").classList.remove("show"); }
@@ -956,7 +971,11 @@ document.getElementById("lkLista").addEventListener("click", async e=>{
     const p = lkVisibili[Number((c||w).dataset.lkc ?? (c||w).dataset.lkw)];
     if(!p) return;
     const url = lkUrl(lkToken(p, true));
-    if(w) window.open("https://wa.me/?text=" + encodeURIComponent("Ciao! Qui puoi seguire " + p.nome.toLowerCase().replace(/(^|\s)\S/g, x=>x.toUpperCase()) + " allo Sci Club Limone: pranzi e versamenti, calendario gare, ordini di partenza e classifiche. " + url), "_blank");
+    if(w){
+      const gen = lkGenitori(p), g = gen[Number(w.dataset.lkg)];
+      window.open("https://wa.me/" + (g ? rbNumeroWa(g.tel) : "") + "?text=" + encodeURIComponent(lkTestoWa(p, url)), "_blank");
+      if(g){ if(!appState.linkInviati) appState.linkInviati = {}; appState.linkInviati[lkChiave(p)] = new Date().toISOString(); saveData(); }
+    }
     else { const ok = await copiaTesto(url); lkMsg(ok ? "Link di " + p.cognome + " " + p.nome + " copiato." : "Copia non riuscita: usa WhatsApp."); }
     lkRender(); saveNow();
     return;
@@ -3337,6 +3356,7 @@ function mergeState(b, l, r){
     bR.forEach(x=>{ if(!lR.some(y=>y.id===x.id)) out.rubrica = out.rubrica.filter(y=>y.id!==x.id); }); }
   if(JSON.stringify(l.calPdf) !== JSON.stringify(b.calPdf)) out.calPdf = l.calPdf;
   Object.keys(l.arch || {}).forEach(k=>{ out.arch = out.arch || {}; if(!out.arch[k]) out.arch[k] = l.arch[k]; });
+  { const bi = b.linkInviati || {}, li = l.linkInviati || {}; out.linkInviati = out.linkInviati || {}; Object.keys(li).forEach(k=>{ if(bi[k]!==li[k]) out.linkInviati[k] = li[k]; }); }
   { const bl = b.link || {}, ll = l.link || {}; out.link = out.link || {}; Object.keys(ll).forEach(k=>{ if(bl[k]!==ll[k]) out.link[k] = ll[k]; }); }
   return JSON.stringify(out);
 }
