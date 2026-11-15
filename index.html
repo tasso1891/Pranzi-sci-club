@@ -552,7 +552,6 @@
   <button class="reset-btn" id="lkBtn" style="margin-right:8px;">🔗 Genitori</button>
   <button class="reset-btn" id="bkBtn" style="margin-right:8px;">💾 Backup</button>
   <button class="reset-btn" id="logoutBtn" style="margin-right:8px;">⎋ Esci</button>
-  <button class="reset-btn" id="resetBtn">↺ Ripristina dati originali</button>
 </div>
 
 <div class="savebar">
@@ -1058,7 +1057,11 @@ function pianoNuovaStagione(label){
   const somma = L => L.reduce((t,p)=>t + Math.abs((p.pagato||0) - pastiConsumati(p)*PREZZO_PASTO - skiTot(p)), 0);
   const usciti = new Set(escono.map(p=>normNome(p.cognome + " " + p.nome)));
   const contattiVia = (appState.rubrica || []).filter(c=>c.bambino && usciti.has(normNome(c.bambino)));
-  return { ultima, taglio, restano, escono, senzaAnno, credito, debito, contattiVia, eurCredito: somma(credito), eurDebito: somma(debito) };
+  const schedeVia = (appState.schede || []).filter(x=>usciti.has(normNome(x.nome || "")));
+  const nGare = (appState.gare || []).length;
+  const cartelle = [...(appState.gareStart || []), ...(appState.gareClass || [])];
+  const nFile = cartelle.reduce((t,c)=>t + (c.files || []).length, 0);
+  return { ultima, taglio, restano, escono, senzaAnno, credito, debito, contattiVia, schedeVia, nGare, nFile, nCartelle: cartelle.length, eurCredito: somma(credito), eurDebito: somma(debito) };
 }
 function atletiNuovaStagione(piano){
   return piano.restano.map(p=>{
@@ -1077,17 +1080,28 @@ async function creaStagione(label){
   const piano = pianoNuovaStagione(label);
   // copia di sicurezza prima di cambiare stagione e rubrica
   try{ if(window.cloudCopie) await window.cloudCopie.crea("prima", bkStatoTesto()); }catch(e){}
-  const prevSeasons = appState.seasons, prevRubrica = appState.rubrica;
+  const prevSeasons = appState.seasons, prevRubrica = appState.rubrica, prevSchede = appState.schede, prevGare = appState.gare, prevStart = appState.gareStart, prevClass = appState.gareClass;
+  const fileGare = [...(appState.gareStart || []), ...(appState.gareClass || [])].reduce((a,c)=>a.concat(c.files || []), []);
   appState.seasons = [...appState.seasons, { id:newId, label }];
   appState.data[newId] = atletiNuovaStagione(piano);
   // rubrica: tolgo i genitori dei bambini che non sono stati copiati (gli altri contatti restano)
   const via = new Set(piano.contattiVia.map(c=>c.id));
   if(via.size) appState.rubrica = (appState.rubrica || []).filter(c=>!via.has(c.id));
+  // schede: tolgo quelle degli atleti usciti (le altre restano con scarponi, sci e obiettivo)
+  const sv = new Set(piano.schedeVia.map(x=>x.id));
+  if(sv.size) appState.schede = (appState.schede || []).filter(x=>!sv.has(x.id));
+  // gare: calendario, ordini di partenza e classifiche ripartono vuoti per la nuova stagione
+  appState.gare = []; appState.gareStart = []; appState.gareClass = [];
   const result = await persistAppState();
-  if(!result.ok){ appState.seasons = prevSeasons; appState.rubrica = prevRubrica; delete appState.data[newId]; return { ok:false, error:result.error }; }
+  if(!result.ok){
+    appState.seasons = prevSeasons; appState.rubrica = prevRubrica; appState.schede = prevSchede;
+    appState.gare = prevGare; appState.gareStart = prevStart; appState.gareClass = prevClass;
+    delete appState.data[newId]; return { ok:false, error:result.error };
+  }
+  fileGare.forEach(f=>{ if(f.pdf) gfEliminaDati(f.id); });
   seasons = appState.seasons;
   await switchSeason(newId);
-  try{ pubblicaGenitori(); }catch(e){}
+  try{ pubblicaGenitori(); pubblicaGare(true); }catch(e){}
   return { ok:true, piano };
 }
 async function createSeason(label){
@@ -1184,27 +1198,6 @@ function addPerson(cognome, nome, anno){
   if(a>=1990 && a<=2100) nuovo.anno = a;
   people.push(nuovo);
   saveData(); render();
-}
-
-let resetPending = false;
-let resetPendingTimer = null;
-function requestReset(){
-  if(resetPending){
-    clearTimeout(resetPendingTimer);
-    resetPending = false;
-    people = currentSeasonId===DEFAULT_SEASON.id ? buildInitialPeople() : [];
-    expandedId = null;
-    saveData(); render();
-    return;
-  }
-  resetPending = true;
-  document.getElementById("resetBtn").classList.add("confirm");
-  document.getElementById("resetBtn").textContent = "↺ Tocca di nuovo per confermare";
-  resetPendingTimer = setTimeout(()=>{
-    resetPending = false;
-    document.getElementById("resetBtn").classList.remove("confirm");
-    document.getElementById("resetBtn").textContent = "↺ Ripristina dati originali";
-  }, 3500);
 }
 
 function computeSummary(){
@@ -2740,7 +2733,6 @@ document.getElementById("addSave").addEventListener("click", ()=>{
   document.getElementById("addForm").classList.remove("open");
 });
 
-document.getElementById("resetBtn").addEventListener("click", requestReset);
 document.getElementById("saveBtn").addEventListener("click", saveNow);
 document.getElementById("seasonDelBtn").addEventListener("click", requestDeleteSeason);
 document.getElementById("seasonFillBtn").addEventListener("click", ricompilaElenco);
@@ -2758,6 +2750,8 @@ function nsAggiorna(){
   if(pi.taglio) h += "<br><br><b>Escono " + pi.escono.length + " atleti</b> nati nel " + (pi.taglio-1) + " o prima" + (pi.escono.length ? ": " + esc(n(pi.escono)) : "") + ".";
   else h += "<br><br>Scrivi l'anno della stagione (es. 2027/28) per togliere i più grandi.";
   h += "<br><br>📇 <b>Rubrica:</b> restano " + ((appState.rubrica || []).length - pi.contattiVia.length) + " contatti" + (pi.contattiVia.length ? ", tolti " + pi.contattiVia.length + " (" + esc(pi.contattiVia.map(c=>c.nome + " di " + c.bambino).slice(0,8).join(", ")) + (pi.contattiVia.length>8 ? "…" : "") + ")" : "") + ". Allenatori e contatti senza bambino collegato restano.";
+  h += "<br><br>📋 <b>Schede:</b> " + (pi.schedeVia.length ? "tolte " + pi.schedeVia.length + " (" + esc(pi.schedeVia.map(x=>x.nome).slice(0,8).join(", ")) + (pi.schedeVia.length>8 ? "…" : "") + "), le altre restano." : "nessuna da togliere, restano tutte.");
+  h += "<br><br>🏁 <b>Gare:</b> si svuotano il calendario (" + pi.nGare + " gare) e le cartelle di ordini di partenza e classifiche (" + pi.nCartelle + " cartelle, " + pi.nFile + " file). Le caricherai per la nuova stagione.";
   if(pi.senzaAnno.length) h += "<br><br>⚠️ Senza anno di nascita (restano in elenco): " + esc(n(pi.senzaAnno)) + ".";
   if(pi.credito.length || pi.debito.length) h += "<br><br>⚠️ <b>Il saldo non viene riportato.</b> In " + esc(pi.ultima.label) + (pi.credito.length ? " hai ancora da restituire " + pi.eurCredito + " € a " + pi.credito.length + " atleti" : "") + (pi.credito.length && pi.debito.length ? " e" : "") + (pi.debito.length ? " da incassare " + pi.eurDebito + " € da " + pi.debito.length : "") + ". La vecchia stagione resta consultabile.";
   info.innerHTML = h;
