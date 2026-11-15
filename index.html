@@ -274,6 +274,23 @@
   </div>
 </div>
 
+<div id="mlOverlay" style="display:none; position:fixed; inset:0; z-index:60; background:rgba(15,27,61,.6); align-items:center; justify-content:center; padding:18px;">
+  <div style="background:#fff; border-radius:18px; padding:20px; width:100%; max-width:380px; max-height:88vh; overflow:auto;">
+    <h2 style="margin:0 0 10px; color:var(--blue-dark); font-size:20px;">✉️ Manda la mail</h2>
+    <div style="font-size:13px; line-height:1.5;">Ti arriva per mail il riepilogo della stagione corrente: pranzi giorno per giorno, versamenti, quanto restituire e il registro dello Ski room, con l'Excel e la copia di sicurezza. Arriva in circa un minuto.</div>
+    <div id="mlTok" style="display:none; margin-top:12px;">
+      <div style="font-size:13px; line-height:1.5; margin-bottom:6px;">La prima volta incolla qui il codice di GitHub (token). Resta salvato solo su questo telefono.</div>
+      <input id="mlTokIn" placeholder="github_pat_…" autocomplete="off" style="width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border); font-size:15px;">
+    </div>
+    <div id="mlMsg" style="font-size:13px; min-height:16px; margin-top:10px;"></div>
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button id="mlNo" style="flex:1; padding:12px 0; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--ink-soft); font-weight:800;">Chiudi</button>
+      <button id="mlSi" style="flex:1; padding:12px 0; border-radius:10px; border:none; background:var(--blue); color:#fff; font-weight:800;">Invia ora</button>
+    </div>
+    <button id="mlCambia" style="display:none; margin-top:10px; background:none; border:none; color:var(--ink-soft); font-size:12px; text-decoration:underline;">Cambia il codice GitHub</button>
+  </div>
+</div>
+
 <div id="nsOverlay" style="display:none; position:fixed; inset:0; z-index:60; background:rgba(15,27,61,.6); align-items:center; justify-content:center; padding:18px;">
   <div style="background:#fff; border-radius:18px; padding:20px; width:100%; max-width:380px; max-height:88vh; overflow:auto;">
     <h2 style="margin:0 0 10px; color:var(--blue-dark); font-size:20px;">Nuova stagione</h2>
@@ -293,7 +310,8 @@
   <div class="season-chips" id="seasonChips"></div>
   <button class="season-add-btn" id="seasonAddToggle">+ Nuova stagione</button>
 </div>
-<div style="margin:8px 16px 0;"><button class="reset-btn" id="seasonDelBtn">🗑 Elimina stagione</button> <button class="reset-btn" id="seasonFillBtn" title="Rimette in elenco i 36 atleti">↻ Ricompila elenco</button></div>
+<div id="roBanner" style="display:none; margin:8px 16px 0; padding:10px 12px; border-radius:12px; background:#FFF6D6; border:1px solid var(--yellow); font-size:13px; line-height:1.45;"></div>
+<div id="seasonBtns" style="margin:8px 16px 0;"><button class="reset-btn" id="seasonDelBtn">🗑 Elimina stagione</button> <button class="reset-btn" id="seasonFillBtn" title="Rimette in elenco i 36 atleti">↻ Ricompila elenco</button></div>
 <div class="season-form" id="seasonForm">
   <input id="seasonLabelInput" placeholder="Es. 2026/27">
   <div style="font-size:13px; color:var(--ink-soft); margin-bottom:10px;">La nuova stagione copia gli atleti di quella attuale (tranne i più grandi), con pasti, versamenti e Ski room azzerati.</div>
@@ -449,9 +467,14 @@
   <div id="gareCal">
   <div id="gaProssima"></div>
   <div style="display:flex; gap:8px; margin:12px 16px 0;">
-    <a class="quick-day-btn" href="calendario-gare.pdf" target="_blank" style="text-decoration:none; text-align:center; flex:1;">📄 Calendario PDF</a>
+    <button class="quick-day-btn" id="gaPdfApri" style="flex:1;">📄 Calendario PDF</button>
     <button class="quick-day-btn" id="gaPassBtn" style="flex:1;"></button>
   </div>
+  <div id="gaPdfGest" style="display:flex; gap:8px; margin:8px 16px 0;">
+    <label class="quick-day-btn" id="gaPdfCarica" style="flex:1; text-align:center; cursor:pointer;">➕ Carica PDF<input type="file" id="gaPdfFile" accept="application/pdf,.pdf" style="display:none;"></label>
+    <button class="quick-day-btn" id="gaPdfDel" style="flex:1;">🗑 Elimina PDF</button>
+  </div>
+  <div id="gaPdfMsg" style="margin:6px 16px 0; font-size:12.5px; color:var(--ink-soft);"></div>
   <div class="add-bar">
     <button class="add-toggle" id="gaAddToggle">+ Nuova gara</button>
     <div class="add-form" id="gaAddForm">
@@ -551,6 +574,7 @@
 <div class="footer">
   <button class="reset-btn" id="lkBtn" style="margin-right:8px;">🔗 Genitori</button>
   <button class="reset-btn" id="bkBtn" style="margin-right:8px;">💾 Backup</button>
+  <button class="reset-btn" id="mlBtn" style="margin-right:8px;">✉️ Mail</button>
   <button class="reset-btn" id="logoutBtn" style="margin-right:8px;">⎋ Esci</button>
 </div>
 
@@ -849,7 +873,7 @@ function riepilogoGenitori(p, stagione){
   const prima = Math.max(0, pagato - vers.reduce((t,v)=>t+v.eur, 0));
   if(prima) vers.push({ d:"", eur:prima });
   const giorni = Object.keys(p.attendance||{}).filter(d=>p.attendance[d]===1).sort().reverse();
-  return { v:1, nome:p.cognome + " " + p.nome, stagione:stagione.label, prezzo:PREZZO_PASTO, pagato, consumati, saldo, rimanenti:rim, stato, versamenti:vers, giorni, partenze: gfPerGenitori(p, "partenza"), classifiche: gfPerGenitori(p, "classifica"), obiettivo: String((schede().find(x=>normNome(x.nome)===lkChiave(p)) || {}).obiettivo || "") };
+  return { v:1, nome:p.cognome + " " + p.nome, stagione:stagione.label, prezzo:PREZZO_PASTO, pagato, consumati, saldo, rimanenti:rim, stato, versamenti:vers, giorni, partenze: gfPerGenitori(p, "partenza"), classifiche: gfPerGenitori(p, "classifica"), obiettivo: String((schedeLive().find(x=>normNome(x.nome)===lkChiave(p)) || {}).obiettivo || "") };
 }
 let lkPubInCorso = false, lkPubRichiesta = false;
 async function pubblicaGenitori(){
@@ -1080,6 +1104,8 @@ async function creaStagione(label){
   const piano = pianoNuovaStagione(label);
   // copia di sicurezza prima di cambiare stagione e rubrica
   try{ if(window.cloudCopie) await window.cloudCopie.crea("prima", bkStatoTesto()); }catch(e){}
+  const prevArch = appState.arch, prevCalPdf = appState.calPdf;
+  appState.arch = Object.assign({}, appState.arch || {}, { [piano.ultima.id]: JSON.parse(JSON.stringify({ schede: schedeLive(), gare: gareLive(), gareStart: appState.gareStart || [], gareClass: appState.gareClass || [], calPdf: calPdfLive() })) });
   const prevSeasons = appState.seasons, prevRubrica = appState.rubrica, prevSchede = appState.schede, prevGare = appState.gare, prevStart = appState.gareStart, prevClass = appState.gareClass;
   const fileGare = [...(appState.gareStart || []), ...(appState.gareClass || [])].reduce((a,c)=>a.concat(c.files || []), []);
   appState.seasons = [...appState.seasons, { id:newId, label }];
@@ -1091,14 +1117,16 @@ async function creaStagione(label){
   const sv = new Set(piano.schedeVia.map(x=>x.id));
   if(sv.size) appState.schede = (appState.schede || []).filter(x=>!sv.has(x.id));
   // gare: calendario, ordini di partenza e classifiche ripartono vuoti per la nuova stagione
-  appState.gare = []; appState.gareStart = []; appState.gareClass = [];
+  appState.gare = []; appState.gareStart = []; appState.gareClass = []; appState.calPdf = { tipo:"nessuno" };
   const result = await persistAppState();
   if(!result.ok){
     appState.seasons = prevSeasons; appState.rubrica = prevRubrica; appState.schede = prevSchede;
-    appState.gare = prevGare; appState.gareStart = prevStart; appState.gareClass = prevClass;
+    appState.gare = prevGare; appState.gareStart = prevStart; appState.gareClass = prevClass; appState.arch = prevArch; appState.calPdf = prevCalPdf;
     delete appState.data[newId]; return { ok:false, error:result.error };
   }
-  fileGare.forEach(f=>{ if(f.pdf) gfEliminaDati(f.id); });
+  { const cp0 = (appState.arch[piano.ultima.id] || {}).calPdf; if(cp0 && cp0.tipo==="caricato" && window.cloudGenitori) window.cloudGenitori.eliminaPdf(cp0.id).catch(()=>{}); }
+  // i PDF restano nell'archivio per te; tolgo solo le copie pubbliche dei genitori
+  fileGare.forEach(f=>{ if(f.pdf){ if(window.cloudGenitori) window.cloudGenitori.eliminaPdf(f.id).catch(()=>{}); try{ localStorage.removeItem("pranzi_pubpdf_" + f.id); }catch(e){} } });
   seasons = appState.seasons;
   await switchSeason(newId);
   try{ pubblicaGenitori(); pubblicaGare(true); }catch(e){}
@@ -1458,7 +1486,7 @@ function requestDeleteSeason(){
     seasonDelPending = false;
     const id = currentSeasonId;
     appState.seasons = appState.seasons.filter(s=>s.id!==id);
-    delete appState.data[id];
+    delete appState.data[id]; if(appState.arch) delete appState.arch[id];
     seasons = appState.seasons;
     currentSeasonId = seasons[seasons.length-1].id;
     people = appState.data[currentSeasonId] || [];
@@ -1493,7 +1521,16 @@ function render(){
   document.getElementById("backTitle").textContent = { registra:"Pranzi", giorni:"Pranzi", persone:"Atleti", attrezzatura:"Schede", skiroom:"Ski room", rubrica:"Rubrica", gare:"Gare" }[currentView] || "";
   document.getElementById("pranziTabs").style.display = inPranzi ? "" : "none";
   document.getElementById("statsBox").style.display = inPranzi ? "" : "none";
-  document.getElementById("seasonBlock").style.display = ["registra","giorni","persone","skiroom"].includes(currentView) ? "block" : "none";
+  document.getElementById("seasonBlock").style.display = ["registra","giorni","persone","skiroom","attrezzatura","gare"].includes(currentView) ? "block" : "none";
+  { const solo = ["attrezzatura","gare"].includes(currentView);
+    ["seasonAddToggle","seasonBtns","seasonForm"].forEach(i=>{ const e = document.getElementById(i); if(e) e.style.display = solo ? "none" : ""; });
+    const b = document.getElementById("roBanner");
+    if(solo && vistaArchivio()){
+      const st = seasons.find(x=>x.id===currentSeasonId);
+      b.innerHTML = "📖 Stai guardando <b>" + esc(st ? st.label : "") + "</b> in sola lettura: le modifiche non vengono salvate. Tocca la stagione attuale qui sopra per tornare.";
+      b.style.display = "";
+    } else b.style.display = "none";
+  }
   document.querySelector(".footer").style.display = inHome ? "" : "none";
   if(currentView==="home"){ }
   else if(currentView==="registra") renderRegisterList();
@@ -1522,7 +1559,11 @@ document.getElementById("tabGiorni").addEventListener("click", ()=>setTab("giorn
 // ---------- ATTREZZATURA (schede personali) ----------
 let skGruppi = new Set();
 let skSearch = "", skOpen = null, skDelPending = null, skDelTimer = null;
-function schede(){ if(!appState.schede) appState.schede = []; return appState.schede; }
+// stagioni passate: schede, calendario gare, ordini di partenza e classifiche sono nell'archivio (sola lettura)
+function vistaArchivio(){ return seasons.length > 0 && currentSeasonId !== seasons[seasons.length-1].id; }
+function archivioDi(k){ const a = (appState.arch || {})[currentSeasonId]; return JSON.parse(JSON.stringify((a && a[k]) || [])); }
+function schedeLive(){ if(!appState.schede) appState.schede = []; return appState.schede; }
+function schede(){ return vistaArchivio() ? archivioDi("schede") : schedeLive(); }
 function skEsc(x){ return String(x==null?"":x).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 const SK_FIELDS = [
   ["scarpMisura","Scarponi · misura (mm)","decimal"],
@@ -1586,6 +1627,7 @@ document.getElementById("skList").addEventListener("click", e=>{
     const id = del.dataset.del;
     if(skDelPending===id){
       clearTimeout(skDelTimer); skDelPending = null; skOpen = null;
+      if(vistaArchivio()) return;
       appState.schede = schede().filter(x=>x.id!==id);
       saveData(); renderSchede();
     } else {
@@ -2177,9 +2219,63 @@ const GARE_2627 = [
 ];
 const GA_MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 let gaOpen = null, gaDelPending = null, gaDelTimer = null, gaPassate = false;
-function gare(){
+// PDF del calendario: statico (quello originale nel sito), caricato dall'app, oppure nessuno
+function calPdfLive(){ return appState.calPdf || { tipo:"statico" }; }
+function calPdfVista(){ if(!vistaArchivio()) return calPdfLive(); const a = (appState.arch || {})[currentSeasonId]; return (a && a.calPdf) || { tipo:"statico" }; }
+let calDelPending = false, calDelTimer = null;
+function renderCalPdf(){
+  const c = calPdfVista(), arch = vistaArchivio();
+  const ha = c.tipo !== "nessuno";
+  document.getElementById("gaPdfApri").style.display = ha ? "" : "none";
+  document.getElementById("gaPdfGest").style.display = arch ? "none" : "flex";
+  document.getElementById("gaPdfCarica").firstChild.textContent = ha ? "🔄 Sostituisci PDF" : "➕ Carica PDF";
+  const d = document.getElementById("gaPdfDel");
+  d.style.display = ha ? "" : "none";
+  d.textContent = calDelPending ? "Tocca di nuovo per eliminare" : "🗑 Elimina PDF";
+  d.style.background = calDelPending ? "var(--red)" : ""; d.style.color = calDelPending ? "#fff" : "";
+}
+async function calPdfCarica(file){
+  const msg = document.getElementById("gaPdfMsg");
+  if(vistaArchivio()) return;
+  if(file.size > 650000){ msg.textContent = "Il PDF è troppo grande (massimo circa 650 KB): prova a comprimerlo."; return; }
+  msg.textContent = "Carico il PDF…";
+  try{
+    const b64 = bytesInBase64(new Uint8Array(await file.arrayBuffer()));
+    if(b64.length > 900000){ msg.textContent = "Il PDF è troppo grande (massimo circa 650 KB): prova a comprimerlo."; return; }
+    if(!window.cloudTesti || !window.cloudGenitori) throw new Error("serve la connessione");
+    const id = gfNuovoId();
+    await window.cloudTesti.salvaPdf(id, b64);
+    await window.cloudGenitori.pubblicaPdf(id, b64);
+    const vecchio = calPdfLive();
+    if(vecchio.tipo==="caricato") gfEliminaDati(vecchio.id);
+    appState.calPdf = { tipo:"caricato", id, nome:file.name };
+    saveData(); renderGare();
+    try{ await pubblicaGare(true); }catch(e){}
+    msg.textContent = "✓ Calendario PDF caricato e visibile ai genitori.";
+  }catch(e){ msg.textContent = "Non riesco a caricare il PDF: controlla la connessione e riprova."; }
+}
+function calPdfElimina(){
+  if(vistaArchivio()) return;
+  if(!calDelPending){
+    calDelPending = true; renderCalPdf();
+    clearTimeout(calDelTimer); calDelTimer = setTimeout(()=>{ calDelPending = false; renderCalPdf(); }, 3500);
+    return;
+  }
+  clearTimeout(calDelTimer); calDelPending = false;
+  const c = calPdfLive();
+  if(c.tipo==="caricato") gfEliminaDati(c.id);
+  appState.calPdf = { tipo:"nessuno" };
+  saveData(); renderGare();
+  pubblicaGare(true).catch(()=>{});
+  document.getElementById("gaPdfMsg").textContent = "PDF del calendario eliminato.";
+}
+function gareLive(){
   if(!appState.gare) appState.gare = GARE_2627.map(([id,d,a,titolo,tipo])=>({ id, d, a, titolo, tipo, note:"" }));
   return appState.gare;
+}
+function gare(){
+  if(vistaArchivio()) return archivioDi("gare");
+  return gareLive();
 }
 function gaFine(g){ return g.a || g.d; }
 function gaQuando(g){
@@ -2191,6 +2287,7 @@ function gaQuando(g){
 function gaGiorni(iso){ return Math.round((new Date(iso + "T00:00:00") - new Date(todayISO(0) + "T00:00:00")) / 86400000); }
 function gaOrdinate(){ return gare().slice().sort((a,b)=> a.d < b.d ? -1 : a.d > b.d ? 1 : a.titolo.localeCompare(b.titolo)); }
 function renderGare(){
+  renderCalPdf();
   [["gtCal","cal"],["gtPart","partenza"],["gtClass","classifica"]].forEach(([id,m])=> document.getElementById(id).classList.toggle("active", gtModo===m));
   document.getElementById("gareCal").style.display = gtModo==="cal" ? "" : "none";
   document.getElementById("gareFolders").style.display = gtModo==="cal" ? "none" : "";
@@ -2237,6 +2334,7 @@ document.getElementById("gaList").addEventListener("click", e=>{
     const id = del.dataset.gadel;
     if(gaDelPending===id){
       clearTimeout(gaDelTimer); gaDelPending = null; gaOpen = null;
+      if(vistaArchivio()) return;
       appState.gare = gare().filter(x=>x.id!==id);
       saveData(); renderGare();
     } else {
@@ -2256,6 +2354,13 @@ document.getElementById("gaList").addEventListener("input", e=>{ if(e.target.mat
 document.getElementById("gaList").addEventListener("change", e=>{
   if(e.target.matches("[data-ga]")){ gaAggiorna(e.target); renderGare(); }
 });
+document.getElementById("gaPdfApri").addEventListener("click", ()=>{
+  const c = calPdfVista();
+  if(c.tipo==="caricato") gfApriPdf(c.id, { nome: c.nome || "Calendario gare", atleti: [] });
+  else if(c.tipo==="statico") window.open("calendario-gare.pdf", "_blank");
+});
+document.getElementById("gaPdfFile").addEventListener("change", e=>{ const f = e.target.files && e.target.files[0]; e.target.value = ""; if(f) calPdfCarica(f); });
+document.getElementById("gaPdfDel").addEventListener("click", calPdfElimina);
 document.getElementById("gaPassBtn").addEventListener("click", ()=>{ gaPassate = !gaPassate; renderGare(); });
 document.getElementById("gaAddToggle").addEventListener("click", ()=> document.getElementById("gaAddForm").classList.toggle("open"));
 document.getElementById("gaAddSave").addEventListener("click", ()=>{
@@ -2274,11 +2379,11 @@ document.getElementById("tabGare").addEventListener("click", ()=>setTab("gare"))
 async function pubblicaGare(forza){
   try{
     if(!window.cloudGenitori) return;
-    const lista = gaOrdinate().map(g=>({ d:g.d, a:g.a||"", titolo:g.titolo, tipo:g.tipo, note:g.note||"" }));
-    const h = lkHash(JSON.stringify(lista));
+    const lista = gareLive().slice().sort((a,b)=> a.d < b.d ? -1 : a.d > b.d ? 1 : a.titolo.localeCompare(b.titolo)).map(g=>({ d:g.d, a:g.a||"", titolo:g.titolo, tipo:g.tipo, note:g.note||"" }));
+    const cp = calPdfLive(), h = lkHash(JSON.stringify([lista, cp]));
     let prima = null; try{ prima = localStorage.getItem("pranzi_pubGare"); }catch(e){}
     if(prima===h && !forza) return;
-    await window.cloudGenitori.pubblica("calendario-gare", { v:1, gare:lista, pdf:"calendario-gare.pdf", aggiornato:new Date().toISOString() });
+    await window.cloudGenitori.pubblica("calendario-gare", { v:1, gare:lista, pdf: cp.tipo==="statico" ? "calendario-gare.pdf" : "", pdfId: cp.tipo==="caricato" ? cp.id : "", pdfNome: cp.tipo==="caricato" ? cp.nome : "", aggiornato:new Date().toISOString() });
     try{ localStorage.setItem("pranzi_pubGare", h); }catch(e){}
   }catch(e){ if(forza) throw e; console.error(e); }
 }
@@ -2287,7 +2392,7 @@ async function pubblicaGare(forza){
 let gtModo = "cal";
 const GF = { partenza:{ chiave:"gareStart", titolo:"Ordine di partenza" }, classifica:{ chiave:"gareClass", titolo:"Classifiche" } };
 let gfAperta = { partenza:null, classifica:null }, gfMsg = "", gfEdit = null, gfForm = null, gfTestoVisto = null, gfDelCart = null, gfDelTimer = null;
-function gfCartelle(t){ const k = GF[t].chiave; if(!appState[k]) appState[k] = []; return appState[k]; }
+function gfCartelle(t){ const k = GF[t].chiave; if(vistaArchivio()) return archivioDi(k); if(!appState[k]) appState[k] = []; return appState[k]; }
 
 // --- lettura del PDF (libreria pdf.js, caricata solo quando serve) ---
 let pdfjsPromessa = null;
@@ -2598,8 +2703,8 @@ async function gfRianalizza(id){
 // --- visualizzatore del PDF con i nostri atleti evidenziati in giallo ---
 let pdfZoom = 1;
 function pdfApplicaZoom(){ document.querySelectorAll("#pdfPagine canvas").forEach(c=>{ c.style.width = (pdfZoom * 100) + "%"; }); }
-async function gfApriPdf(fid){
-  const cart = gfCartellaAperta(), f = cart && cart.files.find(x=>x.id===fid);
+async function gfApriPdf(fid, fo){
+  const cart = gfCartellaAperta(), f = fo || (cart && cart.files.find(x=>x.id===fid));
   if(!f) return;
   const ov = document.getElementById("pdfOverlay"), box = document.getElementById("pdfPagine");
   document.getElementById("pdfTitolo").textContent = f.nome;
@@ -2650,6 +2755,7 @@ document.getElementById("gareFolders").addEventListener("click", async e=>{
     const id = q("[data-gfdelcart]").dataset.gfdelcart;
     if(gfDelCart===id){
       clearTimeout(gfDelTimer); gfDelCart = null;
+      if(vistaArchivio()) return;
       const c = gfCartelle(t).find(x=>x.id===id);
       (c && c.files || []).forEach(f=>gfEliminaDati(f.id));
       appState[GF[t].chiave] = gfCartelle(t).filter(x=>x.id!==id); gfAperta[t] = null; saveData(); renderCartelle();
@@ -2756,6 +2862,48 @@ function nsAggiorna(){
   if(pi.credito.length || pi.debito.length) h += "<br><br>⚠️ <b>Il saldo non viene riportato.</b> In " + esc(pi.ultima.label) + (pi.credito.length ? " hai ancora da restituire " + pi.eurCredito + " € a " + pi.credito.length + " atleti" : "") + (pi.credito.length && pi.debito.length ? " e" : "") + (pi.debito.length ? " da incassare " + pi.eurDebito + " € da " + pi.debito.length : "") + ". La vecchia stagione resta consultabile.";
   info.innerHTML = h;
 }
+// ---------- MAIL: avvia su GitHub lo script che manda il riepilogo ----------
+function mlTok(){ try{ return localStorage.getItem("pranzi_gh_token") || ""; }catch(e){ return ""; } }
+function mlMostra(){
+  const t = mlTok();
+  document.getElementById("mlTok").style.display = t ? "none" : "block";
+  document.getElementById("mlCambia").style.display = t ? "" : "none";
+}
+function mlMsg(t, err){ const e = document.getElementById("mlMsg"); e.textContent = t; e.style.color = err ? "var(--red)" : "var(--ink)"; }
+async function mlInvia(){
+  const h = location.hostname, owner = h.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || h;
+  if(!h.endsWith(".github.io")){ mlMsg("Funziona solo dall'app pubblicata su GitHub.", true); return; }
+  let tok = mlTok();
+  const inp = document.getElementById("mlTokIn").value.trim();
+  if(!tok && inp){ tok = inp; }
+  if(!tok){ mlMsg("Incolla prima il codice GitHub.", true); return; }
+  const b = document.getElementById("mlSi"); b.disabled = true; mlMsg("Invio in corso…");
+  try{
+    let esito = 0;
+    for(const ref of ["main", "master"]){
+      const r = await fetch("https://api.github.com/repos/" + owner + "/" + repo + "/actions/workflows/riepilogo-domenica.yml/dispatches", {
+        method:"POST",
+        headers:{ "Authorization":"Bearer " + tok, "Accept":"application/vnd.github+json", "X-GitHub-Api-Version":"2022-11-28", "Content-Type":"application/json" },
+        body: JSON.stringify({ ref })
+      });
+      esito = r.status;
+      if(r.status===204) break;
+      if(r.status!==422) break;
+    }
+    if(esito===204){
+      try{ localStorage.setItem("pranzi_gh_token", tok); }catch(e){}
+      document.getElementById("mlTokIn").value = ""; mlMostra();
+      mlMsg("✓ Richiesta inviata: la mail arriva tra circa un minuto.");
+    } else if(esito===401){ mlMsg("Il codice GitHub non è valido o è scaduto: creane uno nuovo.", true); }
+    else if(esito===403 || esito===404){ mlMsg("Il codice non ha il permesso giusto (Actions: Read and write su questo repository) oppure manca il file della mail su GitHub.", true); }
+    else { mlMsg("Non riuscito (errore " + esito + "). Controlla che il file della mail sia caricato su GitHub.", true); }
+  }catch(e){ mlMsg("Non riesco a collegarmi: controlla la connessione.", true); }
+  b.disabled = false;
+}
+document.getElementById("mlBtn").addEventListener("click", ()=>{ mlMsg(""); mlMostra(); document.getElementById("mlOverlay").style.display = "flex"; });
+document.getElementById("mlNo").addEventListener("click", ()=>{ document.getElementById("mlOverlay").style.display = "none"; });
+document.getElementById("mlSi").addEventListener("click", mlInvia);
+document.getElementById("mlCambia").addEventListener("click", ()=>{ try{ localStorage.removeItem("pranzi_gh_token"); }catch(e){} mlMostra(); mlMsg(""); });
 document.getElementById("homeNuovaStag").addEventListener("click", ()=>{
   document.getElementById("nsLabel").value = proponiStagione();
   document.getElementById("nsErr").textContent = "";
@@ -2887,6 +3035,8 @@ function mergeState(b, l, r){
       else if(rx){ Object.keys(x).forEach(f=>{ if(JSON.stringify(x[f])!==JSON.stringify(bx[f])) rx[f] = x[f]; }); }
     });
     bR.forEach(x=>{ if(!lR.some(y=>y.id===x.id)) out.rubrica = out.rubrica.filter(y=>y.id!==x.id); }); }
+  if(JSON.stringify(l.calPdf) !== JSON.stringify(b.calPdf)) out.calPdf = l.calPdf;
+  Object.keys(l.arch || {}).forEach(k=>{ out.arch = out.arch || {}; if(!out.arch[k]) out.arch[k] = l.arch[k]; });
   { const bl = b.link || {}, ll = l.link || {}; out.link = out.link || {}; Object.keys(ll).forEach(k=>{ if(bl[k]!==ll[k]) out.link[k] = ll[k]; }); }
   return JSON.stringify(out);
 }

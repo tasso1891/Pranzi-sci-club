@@ -218,7 +218,8 @@ if(!token || !/^[A-Za-z0-9]{16,64}$/.test(token)){
           w.append(el("div", "t", x.titolo), el("div", "q", quando(x) + (x.tipo==="festa" ? " · festività" : "") + (x.note ? " · " + x.note : "")));
           r.append(w); c4.append(r);
         });
-        if(cal.pdf){ const a = el("a", "btn", "📄 Apri il calendario ufficiale (PDF)"); a.href = cal.pdf; a.target = "_blank"; c4.append(a); }
+        if(cal.pdfId){ const b = el("button", "pdfbtn", "📄 Apri il calendario ufficiale (PDF)"); b.addEventListener("click", ()=>apriPdf({ id:cal.pdfId, g:"Calendario gare", f:cal.pdfNome || "", rcs:[] })); c4.append(b); }
+        else if(cal.pdf){ const a = el("a", "btn", "📄 Apri il calendario ufficiale (PDF)"); a.href = cal.pdf; a.target = "_blank"; c4.append(a); }
         pGare.append(c4);
       } else {
         pGare.append(el("div", "card vuoto", "Il calendario gare non è ancora disponibile."));
