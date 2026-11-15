@@ -2187,6 +2187,20 @@ document.getElementById("rbAddSave").addEventListener("click", ()=>{
   const nome = document.getElementById("rbAddNome").value.trim(), err = document.getElementById("rbAddError");
   if(!nome){ err.classList.add("show"); return; }
   err.classList.remove("show");
+  // contatto già presente (stesso nome o stesso telefono): non lo duplico, apro quello esistente
+  const telN = document.getElementById("rbAddTel").value.replace(/\D/g,"").replace(/^(0039|39)(?=\d{9,})/,"");
+  const gia = rubrica().find(c=> normNome(c.nome)===normNome(nome) || (telN.length>=6 && String(c.tel||"").replace(/\D/g,"").replace(/^(0039|39)(?=\d{9,})/,"")===telN));
+  if(gia){
+    const t = document.getElementById("rbAddTel").value.trim(), b = document.getElementById("rbAddBambino").value;
+    if(!gia.tel && t) gia.tel = t;
+    if(!gia.bambino && b) gia.bambino = b;
+    ["rbAddNome","rbAddTel"].forEach(i=>{ document.getElementById(i).value = ""; });
+    document.getElementById("rbAddForm").classList.remove("open");
+    rbSearch = ""; document.getElementById("rbSearch").value = "";
+    rbOpen = gia.id; saveData(); renderRubrica();
+    alert("“" + gia.nome + "” è già in rubrica: non l'ho aggiunto di nuovo.");
+    return;
+  }
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
   rubrica().push({ id, nome, tel: document.getElementById("rbAddTel").value.trim(), ruolo: document.getElementById("rbAddRuolo").value, bambino: document.getElementById("rbAddBambino").value, note: "" });
   ["rbAddNome","rbAddTel"].forEach(i=>{ document.getElementById(i).value = ""; });
