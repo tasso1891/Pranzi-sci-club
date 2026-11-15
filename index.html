@@ -470,7 +470,8 @@
     <button class="quick-day-btn" id="gaPdfApri" style="flex:1;">📄 Calendario PDF</button>
     <button class="quick-day-btn" id="gaPassBtn" style="flex:1;"></button>
   </div>
-  <div id="gaPdfGest" style="display:flex; gap:8px; margin:8px 16px 0;">
+  <div id="gaPdfGest" style="display:flex; flex-wrap:wrap; gap:8px; margin:8px 16px 0;">
+    <button class="quick-day-btn" id="gaPdfLeggi" style="flex:1 1 100%;">📥 Leggi le gare dal PDF</button>
     <label class="quick-day-btn" id="gaPdfCarica" style="flex:1; text-align:center; cursor:pointer;">➕ Carica PDF<input type="file" id="gaPdfFile" accept="application/pdf,.pdf" style="display:none;"></label>
     <button class="quick-day-btn" id="gaPdfDel" style="flex:1;">🗑 Elimina PDF</button>
   </div>
@@ -2220,6 +2221,161 @@ const GARE_2627 = [
 ];
 const GA_MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 let gaOpen = null, gaDelPending = null, gaDelTimer = null, gaPassate = false;
+// --- lettura del calendario gare da PDF (formato a colonne per mese, oppure elenco "18-20 dicembre Nome") ---
+const CAL_MESI = ["GENNAIO","FEBBRAIO","MARZO","APRILE","MAGGIO","GIUGNO","LUGLIO","AGOSTO","SETTEMBRE","OTTOBRE","NOVEMBRE","DICEMBRE"];
+const CAL_FESTE = /(carnevale|martedi|martedì|pasqua|pasquetta|natale|capodanno|epifania|immacolata|ognissanti|ferragosto|festa)/i;
+function calTitolo(t){
+  t = String(t).replace(/\s+/g, " ").trim();
+  t = t.split(" ").map(w=>{
+    const lettere = w.replace(/[^A-Za-zÀ-ÿ]/g, "");
+    if(lettere.length > 2 && w === w.toUpperCase()) return w.toLowerCase().replace(/(^|['’-])([a-zà-ÿ])/g, (m, a, b)=>a + b.toUpperCase());
+    return w;
+  }).join(" ");
+  t = t.replace(/\bMartedi\b/, "Martedì").replace(/\bCucc\b/, "Cuccioli");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function calIso(y, m, d){ return y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0"); }
+function calEvento(d, a, titolo){ return { d, a: a && a > d ? a : "", titolo, tipo: CAL_FESTE.test(titolo) ? "festa" : "gara", note: "" }; }
+function calAnno(testi, fallback){
+  for(const t of testi){ const m = /(20\d\d)\s*[\/\-]\s*(20)?(\d\d)\b/.exec(t); if(m) return Number(m[1]); }
+  return fallback;
+}
+// pagine: [[{s,x,y}]] (y verso l'alto, come in pdf.js); ritorna la lista di gare trovate
+function calAnalizza(pagine, annoInizio){
+  const tutti = pagine.reduce((a, p)=>a.concat(p), []).map(i=>i.s);
+  const A = calAnno(tutti, annoInizio), out = [];
+  const anno = m => (m >= 8 ? A : A + 1);        // set–dic = primo anno, gen–ago = secondo
+  const GIORNI = /^(Lu|Ma|Me|Gi|Ve|Sa|Do)$/i;
+  pagine.forEach(pag=>{
+    const it = pag.map(i=>({ s:String(i.s).trim(), x:i.x, y:i.y })).filter(i=>i.s);
+    // giorni: numero + sigla del giorno sulla stessa riga
+    const giorni = [];
+    it.forEach(n=>{
+      if(!/^\d{1,2}$/.test(n.s)) return;
+      if(it.some(w=>GIORNI.test(w.s) && Math.abs(w.y - n.y) <= 3 && w.x > n.x && w.x - n.x < 30)) giorni.push({ n:Number(n.s), x:n.x, y:n.y });
+    });
+    if(!giorni.length) return;
+    // colonne = gruppi di giorni con la x vicina (distanza massima 40 tra una colonna e l'altra)
+    const ordX = giorni.map(g=>g.x).sort((a, b)=>a - b), soglie = [];
+    ordX.forEach((x, i)=>{ if(i === 0 || x - ordX[i-1] > 40) soglie.push(x); });
+    const colDi = g=>{ let k = 0; soglie.forEach((s, i)=>{ if(g.x >= s - 1) k = i; }); return k; };
+    giorni.forEach(g=>{ g.k = colDi(g); });
+    const cols = soglie.map((s, k)=>({ k, x0: Math.min(...giorni.filter(g=>g.k===k).map(g=>g.x)) })).sort((a, b)=>a.x0 - b.x0);
+    const mesi = it.filter(i=>CAL_MESI.includes(i.s.toUpperCase())).sort((a, b)=>a.x - b.x);
+    if(mesi.length !== cols.length) return;
+    cols.forEach((c, ci)=>{
+      c.mese = CAL_MESI.indexOf(mesi[ci].s.toUpperCase());
+      c.x1 = ci + 1 < cols.length ? cols[ci + 1].x0 - 2 : 1e9;
+      c.giorni = giorni.filter(g=>g.k===c.k).sort((a, b)=>b.y - a.y);
+    });
+    // testi degli eventi
+    const righe = {};   // "colonna|giorno" -> [{s,x,y}]
+    it.forEach(t=>{
+      if(/^\d{1,2}$/.test(t.s) || GIORNI.test(t.s) || CAL_MESI.includes(t.s.toUpperCase()) || /stagione/i.test(t.s)) return;
+      const c = cols.find(c=>t.x >= c.x0 - 2 && t.x < c.x1);
+      if(!c) return;
+      // la riga del giorno è quella più vicina in altezza (le celle alte hanno il numero al centro)
+      let g = null;
+      c.giorni.forEach(d=>{ const diff = Math.abs(d.y - t.y); if(g === null || diff < g.diff) g = { d, diff }; });
+      if(!g) return;
+      const k = c.mese + "|" + g.d.n;
+      (righe[k] = righe[k] || []).push(t);
+    });
+    // per ogni giorno, righe di testo separate (stessa altezza = stessa riga, ordinate per x)
+    const perGiorno = [];
+    Object.keys(righe).forEach(k=>{
+      const [m, d] = k.split("|").map(Number), blocchi = [];
+      righe[k].sort((a, b)=>b.y - a.y || a.x - b.x).forEach(t=>{
+        const b = blocchi.find(b=>Math.abs(b.y - t.y) <= 3);
+        if(b) b.t.push(t.s); else blocchi.push({ y:t.y, t:[t.s] });
+      });
+      blocchi.forEach(b=>perGiorno.push({ m, d, testo: b.t.join(" ").replace(/\s+/g, " ") }));
+    });
+    // stesso testo in giorni consecutivi = un'unica gara su più giorni
+    const gruppi = {};
+    perGiorno.forEach(e=>{ (gruppi[e.m + "|" + e.testo.toLowerCase()] = gruppi[e.m + "|" + e.testo.toLowerCase()] || []).push(e); });
+    Object.values(gruppi).forEach(L=>{
+      L.sort((a, b)=>a.d - b.d);
+      let inizio = L[0], prec = L[0];
+      const chiudi = (e0, e1)=> out.push(calEvento(calIso(anno(e0.m), e0.m, e0.d), e1.d !== e0.d ? calIso(anno(e1.m), e1.m, e1.d) : "", calTitolo(e0.testo)));
+      for(let i = 1; i < L.length; i++){
+        if(L[i].d === prec.d + 1){ prec = L[i]; continue; }
+        chiudi(inizio, prec); inizio = prec = L[i];
+      }
+      chiudi(inizio, prec);
+    });
+  });
+  if(out.length) return out.sort((a, b)=>a.d < b.d ? -1 : a.d > b.d ? 1 : a.titolo.localeCompare(b.titolo));
+  // alternativa: elenco di righe "18-20 dicembre Nome" oppure "06/01/2027 Nome"
+  const righeT = [];
+  pagine.forEach(p=>{
+    const rr = [];
+    p.slice().sort((a, b)=>b.y - a.y || a.x - b.x).forEach(i=>{ const r = rr.find(r=>Math.abs(r.y - i.y) <= 3); if(r) r.t.push(i.s); else rr.push({ y:i.y, t:[i.s] }); });
+    rr.forEach(r=>righeT.push(r.t.join(" ").replace(/\s+/g, " ").trim()));
+  });
+  const M2 = "(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)";
+  righeT.forEach(r=>{
+    let m = new RegExp("^(\\d{1,2})(?:\\s*[-–]\\s*(\\d{1,2}))?\\s+" + M2 + "\\s*[-–:]?\\s*(.+)$", "i").exec(r);
+    if(m){ const mm = CAL_MESI.indexOf(m[3].toUpperCase()); out.push(calEvento(calIso(anno(mm), mm, Number(m[1])), m[2] ? calIso(anno(mm), mm, Number(m[2])) : "", calTitolo(m[4]))); return; }
+    m = /^(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?(?:\s*[-–]\s*(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?)?\s+(.+)$/.exec(r);
+    if(m){
+      const mm = Number(m[2]) - 1, y = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : anno(mm);
+      const fine = m[4] ? calIso(m[6] ? (m[6].length === 2 ? 2000 + Number(m[6]) : Number(m[6])) : anno(Number(m[5]) - 1), Number(m[5]) - 1, Number(m[4])) : "";
+      out.push(calEvento(calIso(y, mm, Number(m[1])), fine, calTitolo(m[7])));
+    }
+  });
+  return out.sort((a, b)=>a.d < b.d ? -1 : a.d > b.d ? 1 : a.titolo.localeCompare(b.titolo));
+}
+
+// legge le gare dal PDF e le aggiunge al calendario (salta quelle già presenti)
+async function calLeggiGare(bytes){
+  const lib = await caricaPdfJs();
+  const pdf = await lib.getDocument({ data: bytes.slice() }).promise;
+  const pagine = [];
+  for(let n = 1; n <= pdf.numPages; n++){
+    const tc = await (await pdf.getPage(n)).getTextContent();
+    pagine.push(tc.items.map(i=>({ s:i.str, x:i.transform[4], y:i.transform[5] })));
+  }
+  const trovate = calAnalizza(pagine, annoNuovaStagione(seasons[seasons.length-1].label) || 2026);
+  const lista = gareLive();
+  const parole = t=>String(t).toLowerCase().replace(/[^a-zà-ÿ0-9 ]/g, " ").split(/\s+/).filter(w=>w.length >= 5);
+  const gia = e=>lista.some(x=>x.d <= e.d && e.d <= (x.a || x.d) && (x.titolo.toLowerCase()===e.titolo.toLowerCase() || parole(x.titolo).some(w=>parole(e.titolo).includes(w))));
+  let agg = 0;
+  trovate.forEach(e=>{
+    if(gia(e)) return;
+    lista.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6) + agg, d:e.d, a:e.a, titolo:e.titolo, tipo:e.tipo, note:"" });
+    agg++;
+  });
+  return { trovate: trovate.length, aggiunte: agg };
+}
+async function calPdfBytes(){
+  const c = calPdfLive();
+  if(c.tipo==="caricato"){
+    const b64 = window.cloudTesti ? await window.cloudTesti.leggiPdf(c.id) : null;
+    if(!b64) throw new Error("PDF non disponibile");
+    const bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+  if(c.tipo==="statico"){ const r = await fetch("calendario-gare.pdf"); if(!r.ok) throw new Error("PDF non trovato"); return new Uint8Array(await r.arrayBuffer()); }
+  throw new Error("nessun PDF");
+}
+function calEsito(r){
+  if(!r.trovate) return "Non sono riuscito a leggere le gare da questo PDF: aggiungile con “+ Nuova gara”, oppure mandami il PDF e sistemo.";
+  return "Ho letto " + r.trovate + " gare dal PDF: " + r.aggiunte + " aggiunte" + (r.trovate - r.aggiunte ? " (" + (r.trovate - r.aggiunte) + " c'erano già)" : "") + ". Controlla date e nomi: le gare su più giorni con scritte su più righe vanno unite a mano.";
+}
+async function calPdfLeggi(){
+  const msg = document.getElementById("gaPdfMsg");
+  if(vistaArchivio()) return;
+  msg.textContent = "Leggo il PDF…";
+  try{
+    const r = await calLeggiGare(await calPdfBytes());
+    if(r.aggiunte) saveData();
+    renderGare();
+    document.getElementById("gaPdfMsg").textContent = calEsito(r);
+    if(r.aggiunte) pubblicaGare().catch(()=>{});
+  }catch(e){ msg.textContent = "Non riesco a leggere il PDF: controlla la connessione e riprova."; }
+}
 // PDF del calendario: statico (quello originale nel sito), caricato dall'app, oppure nessuno
 function calPdfLive(){ return appState.calPdf || { tipo:"statico" }; }
 function calPdfVista(){ if(!vistaArchivio()) return calPdfLive(); const a = (appState.arch || {})[currentSeasonId]; return (a && a.calPdf) || { tipo:"statico" }; }
@@ -2229,6 +2385,7 @@ function renderCalPdf(){
   const ha = c.tipo !== "nessuno";
   document.getElementById("gaPdfApri").style.display = ha ? "" : "none";
   document.getElementById("gaPdfGest").style.display = arch ? "none" : "flex";
+  document.getElementById("gaPdfLeggi").style.display = ha ? "" : "none";
   document.getElementById("gaPdfCarica").firstChild.textContent = ha ? "🔄 Sostituisci PDF" : "➕ Carica PDF";
   const d = document.getElementById("gaPdfDel");
   d.style.display = ha ? "" : "none";
@@ -2251,8 +2408,11 @@ async function calPdfCarica(file){
     if(vecchio.tipo==="caricato") gfEliminaDati(vecchio.id);
     appState.calPdf = { tipo:"caricato", id, nome:file.name };
     saveData(); renderGare();
+    let esito = "";
+    try{ esito = " " + calEsito(await calLeggiGare(new Uint8Array(await file.arrayBuffer()))); saveData(); renderGare(); }
+    catch(e){ esito = " Non sono riuscito a leggere le gare dal PDF: usa “📥 Leggi gare dal PDF” quando c'è connessione."; }
     try{ await pubblicaGare(true); }catch(e){}
-    msg.textContent = "✓ Calendario PDF caricato e visibile ai genitori.";
+    document.getElementById("gaPdfMsg").textContent = "✓ Calendario PDF caricato e visibile ai genitori." + esito;
   }catch(e){ msg.textContent = "Non riesco a caricare il PDF: controlla la connessione e riprova."; }
 }
 function calPdfElimina(){
@@ -2362,6 +2522,7 @@ document.getElementById("gaPdfApri").addEventListener("click", ()=>{
 });
 document.getElementById("gaPdfFile").addEventListener("change", e=>{ const f = e.target.files && e.target.files[0]; e.target.value = ""; if(f) calPdfCarica(f); });
 document.getElementById("gaPdfDel").addEventListener("click", calPdfElimina);
+document.getElementById("gaPdfLeggi").addEventListener("click", calPdfLeggi);
 document.getElementById("gaPassBtn").addEventListener("click", ()=>{ gaPassate = !gaPassate; renderGare(); });
 document.getElementById("gaAddToggle").addEventListener("click", ()=> document.getElementById("gaAddForm").classList.toggle("open"));
 document.getElementById("gaAddSave").addEventListener("click", ()=>{
