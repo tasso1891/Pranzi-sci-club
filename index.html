@@ -410,6 +410,7 @@
     <button class="sr-chip" data-g="baby" style="font-size:12px; padding:9px 2px; white-space:nowrap;">Baby</button>
     <button class="sr-chip" data-g="superbaby" style="font-size:12px; padding:9px 2px; white-space:nowrap;">Superbaby</button>
   </div>
+  <div style="margin:10px 16px 0;"><button class="quick-day-btn" id="skTutte" style="width:100%; display:none;"></button></div>
   <div class="add-bar">
     <button class="add-toggle" id="skAddToggle">+ Nuova scheda</button>
     <div class="add-form" id="skAddForm">
@@ -820,7 +821,7 @@ function riepilogoGenitori(p, stagione){
   const prima = Math.max(0, pagato - vers.reduce((t,v)=>t+v.eur, 0));
   if(prima) vers.push({ d:"", eur:prima });
   const giorni = Object.keys(p.attendance||{}).filter(d=>p.attendance[d]===1).sort().reverse();
-  return { v:1, nome:p.cognome + " " + p.nome, stagione:stagione.label, prezzo:PREZZO_PASTO, pagato, consumati, saldo, rimanenti:rim, stato, versamenti:vers, giorni, obiettivo: String((schede().find(x=>normNome(x.nome)===lkChiave(p)) || {}).obiettivo || "") };
+  return { v:1, nome:p.cognome + " " + p.nome, stagione:stagione.label, prezzo:PREZZO_PASTO, pagato, consumati, saldo, rimanenti:rim, stato, versamenti:vers, giorni, partenze: gfPerGenitori(p, "partenza"), classifiche: gfPerGenitori(p, "classifica"), obiettivo: String((schede().find(x=>normNome(x.nome)===lkChiave(p)) || {}).obiettivo || "") };
 }
 let lkPubInCorso = false, lkPubRichiesta = false;
 async function pubblicaGenitori(){
@@ -828,6 +829,7 @@ async function pubblicaGenitori(){
   if(lkPubInCorso){ lkPubRichiesta = true; return; }
   lkPubInCorso = true;
   try{
+    await pubblicaPdfGenitori();
     const u = lkStagione();
     for(const p of (appState.data[u.id] || [])){
       const tok = appState.link[lkChiave(p)];
@@ -847,6 +849,7 @@ async function lkAggiornaOra(){
   try{
     if(!window.cloudGenitori) throw new Error("serve l'accesso online");
     await pubblicaGare(true);
+    await pubblicaPdfGenitori(true);
     const u = lkStagione();
     let n = 0;
     for(const p of (appState.data[u.id] || [])){
@@ -1475,7 +1478,14 @@ function skSummary(x){
   if(x.obiettivo) a.push("🎯 " + x.obiettivo.replace(/\s+/g, " ").slice(0, 40) + (x.obiettivo.length > 40 ? "…" : ""));
   return a.length ? a.join(" · ") : "da compilare";
 }
+function skMancanti(){
+  const esistenti = new Set(schede().map(x=>normNome(x.nome)));
+  return lkLista().filter(p=>!esistenti.has(lkChiave(p)));
+}
 function renderSchede(){
+  const mancanti = skMancanti(), bt = document.getElementById("skTutte");
+  bt.style.display = mancanti.length ? "" : "none";
+  bt.textContent = "👥 Crea la scheda di tutti gli atleti (" + mancanti.length + " mancanti)";
   const q = skSearch.trim().toUpperCase();
   const list = schede().filter(x=>(!q || x.nome.toUpperCase().includes(q)) && (!skGruppi.size || skGruppi.has(gruppoScheda(x)))).sort((a,b)=>a.nome.localeCompare(b.nome));
   document.querySelectorAll("#skGroups .sr-chip").forEach(c=>{
@@ -1526,6 +1536,14 @@ document.getElementById("skGroups").addEventListener("click", e=>{
   const c = e.target.closest(".sr-chip"); if(!c) return;
   if(skGruppi.has(c.dataset.g)) skGruppi.delete(c.dataset.g); else skGruppi.add(c.dataset.g);
   renderSchede();
+});
+document.getElementById("skTutte").addEventListener("click", ()=>{
+  const m = skMancanti();
+  if(!m.length) return;
+  m.forEach(p=>{
+    schede().push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6) + p.id, nome: p.cognome + " " + p.nome, scarpMisura:"", scarpModello:"", scarpDurezza:"", slalomModello:"", slalomLunghezza:"", giganteModello:"", giganteLunghezza:"", obiettivo:"" });
+  });
+  saveData(); renderSchede();
 });
 document.getElementById("skSearch").addEventListener("input", e=>{ skSearch = e.target.value; renderSchede(); });
 document.getElementById("skAddToggle").addEventListener("click", ()=> document.getElementById("skAddForm").classList.toggle("open"));
@@ -2369,6 +2387,40 @@ function atletiElenco(){
 }
 
 // --- cartelle, caricamento e visualizzazione ---
+function gfEliminaDati(id){
+  if(window.cloudTesti) window.cloudTesti.elimina(id).catch(()=>{});
+  if(window.cloudGenitori) window.cloudGenitori.eliminaPdf(id).catch(()=>{});
+  try{ localStorage.removeItem("pranzi_pubpdf_" + id); }catch(e){}
+}
+// per i genitori: elenco di tutti i file caricati, con la riga del loro bambino (se c'è). Solo lettura.
+function gfPerGenitori(p, tipo){
+  const chiave = lkChiave(p), out = [];
+  (appState[GF[tipo].chiave] || []).slice().sort((a,b)=> a.creata < b.creata ? 1 : -1).forEach(c=>{
+    (c.files || []).slice().reverse().forEach(f=>{
+      const e = (f.atleti || []).find(x=>normNome(x.n)===chiave);
+      const o = { g:c.nome, f:f.nome, id:f.id, pdf:!!f.pdf, d:f.data };
+      if(e) o.m = tipo==="partenza"
+        ? { p:e.p || "", cat:e.cat || "", soc:e.soc || "", rc:e.rc || null }
+        : { pos:e.pos || "", t:e.t || "", gap:e.gap || "", ga:e.ga || "", pa:e.pa || 0, na:e.na || 0, a:e.a || 0, st:e.st || "", mot:e.mot || "", p:e.p || "", cat:e.cat || "", rc:e.rc || null };
+      out.push(o);
+    });
+  });
+  return out;
+}
+async function pubblicaPdfGenitori(forza){
+  if(!window.cloudGenitori || !window.cloudTesti) return;
+  for(const k of ["gareStart", "gareClass"]) for(const c of (appState[k] || [])) for(const f of (c.files || [])){
+    if(!f.pdf) continue;
+    let fatto = null; try{ fatto = localStorage.getItem("pranzi_pubpdf_" + f.id); }catch(e){}
+    if(fatto && !forza) continue;
+    try{
+      const b64 = await window.cloudTesti.leggiPdf(f.id);
+      if(!b64) continue;
+      await window.cloudGenitori.pubblicaPdf(f.id, b64);
+      try{ localStorage.setItem("pranzi_pubpdf_" + f.id, "1"); }catch(e){}
+    }catch(e){ console.error(e); }
+  }
+}
 function gfNuovoId(){ return "f" + Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
 function gfCartellaAperta(){ return gfCartelle(gtModo).find(c=>c.id===gfAperta[gtModo]); }
 function gfRigaHtml(f, e, i){
@@ -2439,7 +2491,10 @@ function gfElabora(righe, nomeFile, tipo, pos, bytes){
     window.cloudTesti.salva(f.id, righe.join("\n"), pos).catch(()=>{});
     if(bytes){
       const b64 = bytesInBase64(bytes);
-      if(b64.length <= 900000){ f.pdf = true; window.cloudTesti.salvaPdf(f.id, b64).catch(()=>{}); }
+      if(b64.length <= 900000){
+        f.pdf = true; window.cloudTesti.salvaPdf(f.id, b64).catch(()=>{});
+        if(window.cloudGenitori) window.cloudGenitori.pubblicaPdf(f.id, b64).then(()=>{ try{ localStorage.setItem("pranzi_pubpdf_" + f.id, "1"); }catch(e){} }).catch(()=>{});
+      }
       else f.pdfGrande = true;
     }
   }
@@ -2525,7 +2580,7 @@ document.getElementById("gareFolders").addEventListener("click", async e=>{
     if(gfDelCart===id){
       clearTimeout(gfDelTimer); gfDelCart = null;
       const c = gfCartelle(t).find(x=>x.id===id);
-      (c && c.files || []).forEach(f=>{ if(window.cloudTesti) window.cloudTesti.elimina(f.id).catch(()=>{}); });
+      (c && c.files || []).forEach(f=>gfEliminaDati(f.id));
       appState[GF[t].chiave] = gfCartelle(t).filter(x=>x.id!==id); gfAperta[t] = null; saveData(); renderCartelle();
     } else { gfDelCart = id; renderCartelle(); clearTimeout(gfDelTimer); gfDelTimer = setTimeout(()=>{ gfDelCart = null; renderCartelle(); }, 3500); }
     return;
@@ -2544,7 +2599,7 @@ document.getElementById("gareFolders").addEventListener("click", async e=>{
   if(q("[data-gfcopia]")){ const ok = gfTestoVisto ? await copiaTesto(gfTestoVisto.testo) : false; gfMsg = ok ? "Testo copiato." : "Copia non riuscita."; renderCartelle(); return; }
   if(q("[data-gfdelfile]")){
     const id = q("[data-gfdelfile]").dataset.gfdelfile, f = trovaFile(id);
-    if(f && confirm("Eliminare «" + f.nome + "» da questa cartella?")){ cart.files = cart.files.filter(x=>x.id!==id); if(window.cloudTesti) window.cloudTesti.elimina(id).catch(()=>{}); saveData(); renderCartelle(); }
+    if(f && confirm("Eliminare «" + f.nome + "» da questa cartella?")){ cart.files = cart.files.filter(x=>x.id!==id); gfEliminaDati(id); saveData(); renderCartelle(); }
     return;
   }
   if(q("[data-gfedit]")){
@@ -2812,7 +2867,9 @@ window.cloudTesti = {
 };
 window.cloudGenitori = {
   async pubblica(tok, dati){ await setDoc(doc(db, "genitori", tok), dati); },
-  async elimina(tok){ await deleteDoc(doc(db, "genitori", tok)); }
+  async elimina(tok){ await deleteDoc(doc(db, "genitori", tok)); },
+  async pubblicaPdf(id, b64){ await setDoc(doc(db, "genitori", "pdf-" + id), { t: new Date().toISOString(), b64 }); },
+  async eliminaPdf(id){ await deleteDoc(doc(db, "genitori", "pdf-" + id)); }
 };
 
 $("loginBtn").onclick = async ()=>{

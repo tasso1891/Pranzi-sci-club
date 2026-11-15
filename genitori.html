@@ -48,11 +48,23 @@
   .gara.passata{ opacity:.5; }
   .gara .t{ font-weight:700; } .gara .q{ color:var(--soft); font-size:13px; margin-top:1px; }
   .btn{ display:block; text-align:center; text-decoration:none; background:#fff; color:var(--blue); border:1.5px solid var(--blue); border-radius:12px; padding:11px; font-weight:800; font-size:14px; margin-top:12px; }
+  .gname{ font-weight:800; font-size:16px; }
+  .res{ margin-top:8px; font-size:15px; font-weight:700; }
+  .res small{ display:block; font-weight:600; color:var(--soft); font-size:13px; margin-top:2px; }
+  .gp{ color:var(--blue); }
+  .bad{ color:var(--bad); }
+  .pdfbtn{ display:block; width:100%; margin-top:10px; background:var(--blue); color:#fff; border:none; border-radius:12px; padding:11px; font:inherit; font-weight:800; font-size:14px; cursor:pointer; }
+  #pdfov{ display:none; position:fixed; inset:0; z-index:50; background:#0F1B3D; }
+  #pdfov .bar{ display:flex; align-items:center; gap:8px; padding:calc(10px + env(safe-area-inset-top)) 12px 10px; background:var(--dark); color:#fff; height:calc(56px + env(safe-area-inset-top)); }
+  #pdfov .bar button{ background:rgba(255,255,255,.15); border:none; color:#fff; border-radius:10px; width:38px; height:38px; font-size:20px; }
+  #pdfov .bar div{ flex:1; min-width:0; font-weight:800; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pdfpag{ position:absolute; top:calc(56px + env(safe-area-inset-top)); bottom:0; left:0; right:0; overflow:auto; -webkit-overflow-scrolling:touch; padding:8px; }
   .foot{ text-align:center; color:var(--soft); font-size:12px; margin:14px 0 24px; }
 </style>
 </head>
 <body>
 <div class="top"><div class="eyebrow">SCI CLUB</div><h1>Registro Pranzi</h1></div>
+<div id="pdfov"><div class="bar"><button id="pdfx">✕</button><div id="pdft"></div><button id="pdfm">−</button><button id="pdfp">+</button></div><div id="pdfpag"></div></div>
 <main id="out"><div class="card vuoto">Caricamento…</div></main>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
@@ -67,6 +79,58 @@ const firebaseConfig = {
   appId: "1:821831582537:web:51bc9804bc708c24369098"
 };
 const out = document.getElementById("out");
+let db = null, pdfZoom = 1, pdfLib = null;
+function caricaPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(pdfLib) return pdfLib;
+  pdfLib = new Promise((ok, ko)=>{
+    const sc = document.createElement("script");
+    sc.src = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js";
+    sc.onload = ()=>{ window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js"; ok(window.pdfjsLib); };
+    sc.onerror = ()=>{ pdfLib = null; ko(new Error("strumento di lettura non raggiungibile")); };
+    document.head.appendChild(sc);
+  });
+  return pdfLib;
+}
+// apre il PDF caricato dall'allenatore, con il proprio bambino evidenziato in giallo (sola lettura)
+async function apriPdf(it){
+  const ov = document.getElementById("pdfov"), box = document.getElementById("pdfpag");
+  document.getElementById("pdft").textContent = it.g + " · " + it.f;
+  box.innerHTML = '<div style="color:#fff; padding:20px;">Carico il PDF…</div>';
+  ov.style.display = "block"; pdfZoom = 1;
+  try{
+    const s = await getDoc(doc(db, "genitori", "pdf-" + it.id));
+    if(!s.exists()) throw new Error("PDF non ancora disponibile");
+    const lib = await caricaPdfJs();
+    const bin = atob(s.data().b64), bytes = new Uint8Array(bin.length);
+    for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const pdf = await lib.getDocument({ data: bytes }).promise;
+    box.innerHTML = "";
+    const rc = it.m && it.m.rc;
+    for(let n = 1; n <= pdf.numPages; n++){
+      const page = await pdf.getPage(n), vp = page.getViewport({ scale: 2 });
+      const cv = document.createElement("canvas");
+      cv.width = vp.width; cv.height = vp.height;
+      cv.style.cssText = "display:block; width:" + (pdfZoom * 100) + "%; background:#fff; margin-bottom:8px;";
+      box.appendChild(cv);
+      const ctx = cv.getContext("2d");
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      if(rc && rc.p === n - 1){
+        ctx.globalCompositeOperation = "multiply"; ctx.fillStyle = "#FFEB00";
+        const r = vp.convertToViewportRectangle([rc.x0 - 2, rc.y - rc.h * 0.25, rc.x1 + 2, rc.y + rc.h * 0.85]);
+        ctx.fillRect(Math.min(r[0], r[2]), Math.min(r[1], r[3]), Math.abs(r[2] - r[0]), Math.abs(r[3] - r[1]));
+        ctx.globalCompositeOperation = "source-over";
+      }
+    }
+  }catch(e){
+    box.innerHTML = '<div style="color:#fff; padding:20px; line-height:1.5;"></div>';
+    box.firstChild.textContent = "Non riesco ad aprire il PDF: " + (e && e.message || e) + ".";
+  }
+}
+function zoomPdf(d){ pdfZoom = Math.max(1, Math.min(4, pdfZoom + d)); document.querySelectorAll("#pdfpag canvas").forEach(c=>{ c.style.width = (pdfZoom * 100) + "%"; }); }
+document.getElementById("pdfx").addEventListener("click", ()=>{ document.getElementById("pdfov").style.display = "none"; document.getElementById("pdfpag").innerHTML = ""; });
+document.getElementById("pdfp").addEventListener("click", ()=>zoomPdf(0.5));
+document.getElementById("pdfm").addEventListener("click", ()=>zoomPdf(-0.5));
 function el(tag, cls, txt){ const e = document.createElement(tag); if(cls) e.className = cls; if(txt!==undefined) e.textContent = txt; return e; }
 function data(iso){
   if(!iso) return "Versato in precedenza";
@@ -94,7 +158,7 @@ if(!token || !/^[A-Za-z0-9]{16,64}$/.test(token)){
   errore("Link non valido. Chiedi il link giusto a chi gestisce i pranzi.");
 } else {
   try{
-    const db = getFirestore(initializeApp(firebaseConfig));
+    db = getFirestore(initializeApp(firebaseConfig));
     const [snap, snapGare] = await Promise.all([
       getDoc(doc(db, "genitori", token)),
       getDoc(doc(db, "genitori", "calendario-gare")).catch(()=>null)
@@ -158,6 +222,34 @@ if(!token || !/^[A-Za-z0-9]{16,64}$/.test(token)){
         pGare.append(el("div", "card vuoto", "Il calendario gare non è ancora disponibile."));
       }
       sezione("🏁", "Gare", pGare).forEach(x=>frag.append(x));
+
+      // ORDINE DI PARTENZA e CLASSIFICHE: quello che carica l'allenatore (solo lettura)
+      [["🚦", "Ordine di partenza", d.partenze || [], "partenza"], ["🏆", "Classifiche", d.classifiche || [], "classifica"]].forEach(([ic, tit, lista, tipo])=>{
+        const pn = el("div");
+        if(!lista.length) pn.append(el("div", "card vuoto", "Per ora non c'è niente di caricato."));
+        lista.forEach(it=>{
+          const c = el("div", "card");
+          c.append(el("div", "gname", it.g), el("div", "sub", it.f));
+          const r = el("div", "res");
+          if(!it.m){ r.append(document.createTextNode("Non presente in questo elenco.")); }
+          else if(tipo==="partenza"){
+            r.append(document.createTextNode("Pettorale " + (it.m.p || "—")));
+            if(it.m.cat) r.append(el("small", "", it.m.cat));
+          } else if(it.m.st){
+            const b = el("span", "bad", it.m.st + (it.m.mot ? " · " + it.m.mot : "")); r.append(b);
+            if(it.m.cat) r.append(el("small", "", it.m.cat));
+          } else {
+            r.append(document.createTextNode((it.m.pos ? it.m.pos + "° · " : "") + "tempo " + it.m.t + " "));
+            if(it.m.gap) r.append(el("span", "gp", it.m.gap));
+            const sm = el("small", "", (it.m.cat ? it.m.cat : "") + (it.m.a && it.m.pa ? " · nati nel " + it.m.a + ": " + it.m.pa + "° su " + it.m.na : "") + (it.m.ga ? " · " + it.m.ga : ""));
+            r.append(sm);
+          }
+          c.append(r);
+          if(it.pdf){ const b = el("button", "pdfbtn", "📄 Apri il PDF"); b.addEventListener("click", ()=>apriPdf(it)); c.append(b); }
+          pn.append(c);
+        });
+        sezione(ic, tit, pn).forEach(x=>frag.append(x));
+      });
 
       // OBIETTIVO: quello scritto sulla scheda del bambino
       const pObb = el("div"), cO = el("div", "card");
