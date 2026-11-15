@@ -2401,7 +2401,7 @@ function gfPerGenitori(p, tipo){
   (appState[GF[tipo].chiave] || []).slice().sort((a,b)=> a.creata < b.creata ? 1 : -1).forEach(c=>{
     (c.files || []).slice().reverse().forEach(f=>{
       const e = (f.atleti || []).find(x=>normNome(x.n)===chiave);
-      const o = { g:c.nome, f:f.nome, id:f.id, pdf:!!f.pdf, d:f.data };
+      const o = { g:c.nome, f:f.nome, id:f.id, pdf:!!f.pdf, d:f.data, rcs:(f.atleti || []).filter(x=>x.rc).map(x=>x.rc) };
       if(e) o.m = tipo==="partenza"
         ? { p:e.p || "", cat:e.cat || "", soc:e.soc || "", rc:e.rc || null }
         : { pos:e.pos || "", t:e.t || "", gap:e.gap || "", ga:e.ga || "", pa:e.pa || 0, na:e.na || 0, a:e.a || 0, st:e.st || "", mot:e.mot || "", p:e.p || "", cat:e.cat || "", rc:e.rc || null };

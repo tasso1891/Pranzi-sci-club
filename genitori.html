@@ -108,7 +108,7 @@ async function apriPdf(it){
     for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     const pdf = await lib.getDocument({ data: bytes }).promise;
     box.innerHTML = "";
-    const rc = it.m && it.m.rc;
+    const rcs = (it.rcs && it.rcs.length) ? it.rcs : (it.m && it.m.rc ? [it.m.rc] : []);
     for(let n = 1; n <= pdf.numPages; n++){
       const page = await pdf.getPage(n), vp = page.getViewport({ scale: 2 });
       const cv = document.createElement("canvas");
@@ -117,12 +117,12 @@ async function apriPdf(it){
       box.appendChild(cv);
       const ctx = cv.getContext("2d");
       await page.render({ canvasContext: ctx, viewport: vp }).promise;
-      if(rc && rc.p === n - 1){
+      rcs.filter(rc=>rc.p === n - 1).forEach(rc=>{
         ctx.globalCompositeOperation = "multiply"; ctx.fillStyle = "#FFEB00";
         const r = vp.convertToViewportRectangle([rc.x0 - 2, rc.y - rc.h * 0.25, rc.x1 + 2, rc.y + rc.h * 0.85]);
         ctx.fillRect(Math.min(r[0], r[2]), Math.min(r[1], r[3]), Math.abs(r[2] - r[0]), Math.abs(r[3] - r[1]));
         ctx.globalCompositeOperation = "source-over";
-      }
+      });
     }
   }catch(e){
     box.innerHTML = '<div style="color:#fff; padding:20px; line-height:1.5;"></div>';
