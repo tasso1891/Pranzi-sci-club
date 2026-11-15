@@ -934,7 +934,7 @@ function lkTestoWa(p, url){ return "Ciao! Qui puoi seguire " + p.nome.toLowerCas
 // genitori collegati al bambino in rubrica (con numero)
 function lkGenitori(p){
   const nome = p.cognome + " " + p.nome;
-  return (appState.rubrica || []).filter(c=>c.bambino && normNome(c.bambino)===normNome(nome) && String(c.tel||"").replace(/\D/g,"").length>=6);
+  return (appState.rubrica || []).filter(c=>rbBambini(c).some(b=>normNome(b)===normNome(nome)) && String(c.tel||"").replace(/\D/g,"").length>=6);
 }
 function lkRender(){
   const q = document.getElementById("lkCerca").value.trim().toUpperCase();
@@ -1101,7 +1101,7 @@ function pianoNuovaStagione(label){
   const debito = src.filter(p=>(p.pagato||0) - pastiConsumati(p)*PREZZO_PASTO - skiTot(p) < 0);
   const somma = L => L.reduce((t,p)=>t + Math.abs((p.pagato||0) - pastiConsumati(p)*PREZZO_PASTO - skiTot(p)), 0);
   const usciti = new Set(escono.map(p=>normNome(p.cognome + " " + p.nome)));
-  const contattiVia = (appState.rubrica || []).filter(c=>c.bambino && usciti.has(normNome(c.bambino)));
+  const contattiVia = (appState.rubrica || []).filter(c=>{ const bb = rbBambini(c); return bb.length && bb.every(b=>usciti.has(normNome(b))); });
   const schedeVia = (appState.schede || []).filter(x=>usciti.has(normNome(x.nome || "")));
   const nGare = (appState.gare || []).length;
   const cartelle = [...(appState.gareStart || []), ...(appState.gareClass || [])];
@@ -1134,6 +1134,8 @@ async function creaStagione(label){
   // rubrica: tolgo i genitori dei bambini che non sono stati copiati (gli altri contatti restano)
   const via = new Set(piano.contattiVia.map(c=>c.id));
   if(via.size) appState.rubrica = (appState.rubrica || []).filter(c=>!via.has(c.id));
+  { const us = new Set(piano.escono.map(p=>normNome(p.cognome + " " + p.nome)));
+    appState.rubrica = (appState.rubrica || []).map(c=>{ const bb = rbBambini(c); if(!bb.some(b=>us.has(normNome(b)))) return c; const n = Object.assign({}, c); rbImposta(n, bb.filter(b=>!us.has(normNome(b)))); return n; }); }
   // schede: tolgo quelle degli atleti usciti (le altre restano con scarponi, sci e obiettivo)
   const sv = new Set(piano.schedeVia.map(x=>x.id));
   if(sv.size) appState.schede = (appState.schede || []).filter(x=>!sv.has(x.id));
@@ -2114,13 +2116,15 @@ bkAggiornaBottone();
 let rbSearch = "", rbOpen = null, rbDelPending = null, rbDelTimer = null, rbRuoli = new Set();
 const RB_RUOLI = { genitore:"Genitore", staff:"Staff", altro:"Altro" };
 function rubrica(){ if(!appState.rubrica) appState.rubrica = []; return appState.rubrica; }
+function rbBambini(c){ return Array.isArray(c.bambini) ? c.bambini.filter(Boolean) : (c.bambino ? [c.bambino] : []); }
+function rbImposta(c, lista){ c.bambini = lista.filter((x,i)=>x && lista.indexOf(x)===i); c.bambino = c.bambini[0] || ""; }
 function rbNomiBambini(){
   appState.data[currentSeasonId] = people;
   const u = seasons[seasons.length-1];
   return (appState.data[u.id] || []).map(p=>p.cognome + " " + p.nome).sort((a,b)=>a.localeCompare(b));
 }
-function rbOpzioniBambino(sel){
-  const nomi = rbNomiBambini();
+function rbOpzioniBambino(sel, escludi){
+  const nomi = rbNomiBambini().filter(n=>!(escludi||[]).includes(n));
   if(sel && !nomi.includes(sel)) nomi.push(sel);
   return '<option value="">Nessun bambino collegato</option>' + nomi.map(n=>`<option value="${skEsc(n)}" ${n===sel?"selected":""}>${skEsc(n)}</option>`).join("");
 }
@@ -2134,7 +2138,7 @@ function rbNumeroWa(t){
 function renderRubrica(){
   const q = rbSearch.trim().toUpperCase();
   const tutti = rubrica();
-  const lista = tutti.filter(c=>(!rbRuoli.size || rbRuoli.has(c.ruolo)) && (!q || ((c.nome||"") + " " + (c.tel||"") + " " + (c.bambino||"")).toUpperCase().includes(q)))
+  const lista = tutti.filter(c=>(!rbRuoli.size || rbRuoli.has(c.ruolo)) && (!q || ((c.nome||"") + " " + (c.tel||"") + " " + rbBambini(c).join(" ")).toUpperCase().includes(q)))
     .sort((a,b)=>(a.nome||"").localeCompare(b.nome||""));
   document.querySelectorAll("#rbRuoli .sr-chip").forEach(c=>{
     c.classList.toggle("on", rbRuoli.has(c.dataset.r));
@@ -2151,11 +2155,13 @@ function renderRubrica(){
         + `<label class="sk-lbl">Nome</label><input class="sk-in" data-rb="${c.id}" data-f="nome" value="${skEsc(c.nome)}">`
         + `<label class="sk-lbl">Telefono</label><input class="sk-in" inputmode="tel" data-rb="${c.id}" data-f="tel" value="${skEsc(c.tel)}">`
         + `<label class="sk-lbl">Ruolo</label><select class="sk-in" data-rb="${c.id}" data-f="ruolo">${Object.keys(RB_RUOLI).map(r=>`<option value="${r}" ${c.ruolo===r?"selected":""}>${RB_RUOLI[r]}</option>`).join("")}</select>`
-        + `<label class="sk-lbl">Bambino collegato</label><select class="sk-in" data-rb="${c.id}" data-f="bambino">${rbOpzioniBambino(c.bambino)}</select>`
+        + `<label class="sk-lbl">Bambini collegati (anche più fratelli)</label>`
+        + rbBambini(c).map((b,i)=>`<div style="display:flex; align-items:center; gap:8px; margin:4px 0;"><div style="flex:1; font-weight:600;">${skEsc(b)}</div><button class="bk-mini" data-rbrm="${c.id}" data-i="${i}">✕ Togli</button></div>`).join("")
+        + `<select class="sk-in" data-rbadd="${c.id}">${rbOpzioniBambino("", rbBambini(c)).replace("Nessun bambino collegato", "+ Aggiungi un bambino…")}</select>`
         + `<label class="sk-lbl">Note</label><input class="sk-in" data-rb="${c.id}" data-f="note" value="${skEsc(c.note)}">`
         + `<button class="reset-btn sk-del" data-rbdel="${c.id}">${rbDelPending===c.id ? "Tocca di nuovo per eliminare" : "🗑 Elimina contatto"}</button></div>`;
     }
-    const sub = [RB_RUOLI[c.ruolo] || "", c.bambino ? "di " + c.bambino : "", c.tel || ""].filter(Boolean).join(" · ");
+    const sub = [RB_RUOLI[c.ruolo] || "", rbBambini(c).length ? "di " + rbBambini(c).join(" e ") : "", c.tel || ""].filter(Boolean).join(" · ");
     const azioni = c.tel ? `<button class="rb-act" data-rbcall="${c.id}" title="Chiama">📞</button><button class="rb-act" data-rbwa="${c.id}" title="WhatsApp">💬</button>` : "";
     return `<div class="sk-card"><div style="display:flex; align-items:center;"><button class="sk-head" data-rbopen="${c.id}" style="flex:1; min-width:0;"><div><div class="sk-name">${skEsc(c.nome)}</div><div class="sk-sub">${skEsc(sub)}</div></div><span>${open?"⌃":"⌄"}</span></button>${azioni}</div>${body}</div>`;
   }).join("");
@@ -2167,6 +2173,12 @@ document.getElementById("rbList").addEventListener("click", e=>{
     if(!c) return;
     if(call) location.href = "tel:" + String(c.tel).replace(/[^\d+]/g, "");
     else window.open("https://wa.me/" + rbNumeroWa(c.tel), "_blank");
+    return;
+  }
+  const rm = e.target.closest("[data-rbrm]");
+  if(rm){
+    const c = rubrica().find(x=>x.id===rm.dataset.rbrm);
+    if(c){ const l = rbBambini(c); l.splice(Number(rm.dataset.i), 1); rbImposta(c, l); saveData(); renderRubrica(); }
     return;
   }
   const del = e.target.closest("[data-rbdel]");
@@ -2191,7 +2203,14 @@ function rbAggiorna(t){
   return c;
 }
 document.getElementById("rbList").addEventListener("input", e=>{ if(e.target.matches("input.sk-in[data-rb]")) rbAggiorna(e.target); });
-document.getElementById("rbList").addEventListener("change", e=>{ if(e.target.matches("select.sk-in[data-rb]")){ rbAggiorna(e.target); renderRubrica(); } });
+document.getElementById("rbList").addEventListener("change", e=>{
+  if(e.target.matches("select.sk-in[data-rb]")){ rbAggiorna(e.target); renderRubrica(); return; }
+  if(e.target.matches("select[data-rbadd]")){
+    const c = rubrica().find(x=>x.id===e.target.dataset.rbadd);
+    if(c && e.target.value){ rbImposta(c, rbBambini(c).concat(e.target.value)); saveData(); }
+    renderRubrica();
+  }
+});
 document.getElementById("rbSearch").addEventListener("input", e=>{ rbSearch = e.target.value; renderRubrica(); });
 document.getElementById("rbRuoli").addEventListener("click", e=>{
   const c = e.target.closest(".sr-chip"); if(!c) return;
@@ -2212,7 +2231,7 @@ document.getElementById("rbAddSave").addEventListener("click", ()=>{
   if(gia){
     const t = document.getElementById("rbAddTel").value.trim(), b = document.getElementById("rbAddBambino").value;
     if(!gia.tel && t) gia.tel = t;
-    if(!gia.bambino && b) gia.bambino = b;
+    if(b && !rbBambini(gia).includes(b)) rbImposta(gia, rbBambini(gia).concat(b));
     ["rbAddNome","rbAddTel"].forEach(i=>{ document.getElementById(i).value = ""; });
     document.getElementById("rbAddForm").classList.remove("open");
     rbSearch = ""; document.getElementById("rbSearch").value = "";
@@ -2221,7 +2240,7 @@ document.getElementById("rbAddSave").addEventListener("click", ()=>{
     return;
   }
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-  rubrica().push({ id, nome, tel: document.getElementById("rbAddTel").value.trim(), ruolo: document.getElementById("rbAddRuolo").value, bambino: document.getElementById("rbAddBambino").value, note: "" });
+  rubrica().push({ id, nome, tel: document.getElementById("rbAddTel").value.trim(), ruolo: document.getElementById("rbAddRuolo").value, bambino: document.getElementById("rbAddBambino").value, bambini: document.getElementById("rbAddBambino").value ? [document.getElementById("rbAddBambino").value] : [], note: "" });
   ["rbAddNome","rbAddTel"].forEach(i=>{ document.getElementById(i).value = ""; });
   document.getElementById("rbAddForm").classList.remove("open");
   rbSearch = ""; document.getElementById("rbSearch").value = "";
@@ -3174,7 +3193,7 @@ function nsAggiorna(){
   let h = "Copio <b>" + pi.restano.length + " atleti</b> da " + esc(pi.ultima.label) + ", con pasti, versamenti e Ski room azzerati (schede, rubrica e link dei genitori restano).";
   if(pi.taglio) h += "<br><br><b>Escono " + pi.escono.length + " atleti</b> nati nel " + (pi.taglio-1) + " o prima" + (pi.escono.length ? ": " + esc(n(pi.escono)) : "") + ".";
   else h += "<br><br>Scrivi l'anno della stagione (es. 2027/28) per togliere i più grandi.";
-  h += "<br><br>📇 <b>Rubrica:</b> restano " + ((appState.rubrica || []).length - pi.contattiVia.length) + " contatti" + (pi.contattiVia.length ? ", tolti " + pi.contattiVia.length + " (" + esc(pi.contattiVia.map(c=>c.nome + " di " + c.bambino).slice(0,8).join(", ")) + (pi.contattiVia.length>8 ? "…" : "") + ")" : "") + ". Allenatori e contatti senza bambino collegato restano.";
+  h += "<br><br>📇 <b>Rubrica:</b> restano " + ((appState.rubrica || []).length - pi.contattiVia.length) + " contatti" + (pi.contattiVia.length ? ", tolti " + pi.contattiVia.length + " (" + esc(pi.contattiVia.map(c=>c.nome + " di " + rbBambini(c).join(" e ")).slice(0,8).join(", ")) + (pi.contattiVia.length>8 ? "…" : "") + ")" : "") + ". Allenatori e contatti senza bambino collegato restano.";
   h += "<br><br>📋 <b>Schede:</b> " + (pi.schedeVia.length ? "tolte " + pi.schedeVia.length + " (" + esc(pi.schedeVia.map(x=>x.nome).slice(0,8).join(", ")) + (pi.schedeVia.length>8 ? "…" : "") + "), le altre restano." : "nessuna da togliere, restano tutte.");
   h += "<br><br>🏁 <b>Gare:</b> si svuotano il calendario (" + pi.nGare + " gare) e le cartelle di ordini di partenza e classifiche (" + pi.nCartelle + " cartelle, " + pi.nFile + " file). Le caricherai per la nuova stagione.";
   if(pi.senzaAnno.length) h += "<br><br>⚠️ Senza anno di nascita (restano in elenco): " + esc(n(pi.senzaAnno)) + ".";
