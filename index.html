@@ -2990,7 +2990,7 @@ async function gfRianalizza(id){
 let pdfZoom = 1;
 function pdfApplicaZoom(){ document.querySelectorAll("#pdfPagine canvas").forEach(c=>{ c.style.width = (pdfZoom * 100) + "%"; }); }
 async function gfApriPdf(fid, fo){
-  const cart = gfCartellaAperta(), f = fo || (cart && cart.files.find(x=>x.id===fid));
+  const cart = fo ? null : gfCartellaAperta(), f = fo || (cart && cart.files.find(x=>x.id===fid));
   if(!f) return;
   const ov = document.getElementById("pdfOverlay"), box = document.getElementById("pdfPagine");
   document.getElementById("pdfTitolo").textContent = f.nome;
