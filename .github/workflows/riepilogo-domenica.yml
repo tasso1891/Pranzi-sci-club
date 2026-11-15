@@ -1,0 +1,20 @@
+name: Riepilogo domenica sera
+on:
+  schedule:
+    - cron: "0 19 * * 0"   # ogni domenica, 19:00 UTC = 20:00 in inverno
+  workflow_dispatch:        # permette di lanciarlo a mano per provare
+jobs:
+  invia:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install openpyxl
+      - run: python riepilogo.py
+        env:
+          PRANZI_EMAIL: pranzi@sciclub.it
+          PRANZI_PASSWORD: ${{ secrets.PRANZI_PASSWORD }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_A: ${{ secrets.MAIL_A }}
