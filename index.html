@@ -373,7 +373,7 @@
     <div style="font-size:19px; font-weight:800; color:var(--blue-dark);">Link genitori</div>
     <button id="lkClose" style="background:var(--border); border:none; border-radius:999px; width:32px; height:32px; font-size:16px;">✕</button>
   </div>
-  <div style="font-size:13px; color:var(--ink-soft); line-height:1.5;">Ogni bambino ha un link personale: il genitore lo apre dal telefono, senza password, e vede solo i pranzi e i versamenti del suo bambino (non lo Ski room). Il link si aggiorna ogni volta che premi Salva. Mandalo solo al genitore giusto.</div>
+  <div style="font-size:13px; color:var(--ink-soft); line-height:1.5;">Ogni bambino ha un link personale: il genitore lo apre dal telefono, senza password, e vede solo i dati del suo bambino: pranzi e versamenti, calendario gare, ordini di partenza, classifiche e obiettivo (non lo Ski room). Il link si aggiorna ogni volta che premi Salva. Mandalo solo al genitore giusto.</div>
   <button class="bk-btn" id="lkTutti">🔗 Crea i link mancanti</button>
   <button class="bk-btn sec" id="lkAggiorna">🔄 Aggiorna ora le pagine dei genitori</button>
   <input id="lkCerca" placeholder="Cerca un bambino…" style="width:100%; padding:11px 12px; border-radius:12px; border:1px solid var(--border); font-size:14px; background:#fff; margin:4px 0 6px;">
@@ -905,7 +905,7 @@ document.getElementById("lkLista").addEventListener("click", async e=>{
     const p = lkVisibili[Number((c||w).dataset.lkc ?? (c||w).dataset.lkw)];
     if(!p) return;
     const url = lkUrl(lkToken(p, true));
-    if(w) window.open("https://wa.me/?text=" + encodeURIComponent("Ciao! Qui puoi vedere i pranzi e i versamenti di " + p.nome.toLowerCase().replace(/(^|\s)\S/g, x=>x.toUpperCase()) + ": " + url), "_blank");
+    if(w) window.open("https://wa.me/?text=" + encodeURIComponent("Ciao! Qui puoi seguire " + p.nome.toLowerCase().replace(/(^|\s)\S/g, x=>x.toUpperCase()) + " allo Sci Club Limone: pranzi e versamenti, calendario gare, ordini di partenza e classifiche. " + url), "_blank");
     else { const ok = await copiaTesto(url); lkMsg(ok ? "Link di " + p.cognome + " " + p.nome + " copiato." : "Copia non riuscita: usa WhatsApp."); }
     lkRender(); saveNow();
     return;
