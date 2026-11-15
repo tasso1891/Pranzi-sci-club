@@ -314,7 +314,7 @@
   </div>
   <div class="day-total">
     <div><div class="n" id="dayTotalCount">0</div><div class="l" id="dayTotalLabel">iscritti</div></div>
-    <div class="l" style="text-align:right;">tocca un nome per segnare presente,<br>poi premi Salva</div>
+    <div class="l" style="text-align:right;">tocca un nome per segnare presente,<br>si salva da solo</div>
   </div>
   <div style="margin:12px 16px 0;">
     <div class="sr-cap">Seleziona</div>
@@ -373,7 +373,7 @@
     <div style="font-size:19px; font-weight:800; color:var(--blue-dark);">Link genitori</div>
     <button id="lkClose" style="background:var(--border); border:none; border-radius:999px; width:32px; height:32px; font-size:16px;">✕</button>
   </div>
-  <div style="font-size:13px; color:var(--ink-soft); line-height:1.5;">Ogni bambino ha un link personale: il genitore lo apre dal telefono, senza password, e vede solo i dati del suo bambino: pranzi e versamenti, calendario gare, ordini di partenza, classifiche e obiettivo (non lo Ski room). Il link si aggiorna ogni volta che premi Salva. Mandalo solo al genitore giusto.</div>
+  <div style="font-size:13px; color:var(--ink-soft); line-height:1.5;">Ogni bambino ha un link personale: il genitore lo apre dal telefono, senza password, e vede solo i dati del suo bambino: pranzi e versamenti, calendario gare, ordini di partenza, classifiche e obiettivo (non lo Ski room). Il link si aggiorna da solo a ogni modifica. Mandalo solo al genitore giusto.</div>
   <button class="bk-btn" id="lkTutti">🔗 Crea i link mancanti</button>
   <button class="bk-btn sec" id="lkAggiorna">🔄 Aggiorna ora le pagine dei genitori</button>
   <input id="lkCerca" placeholder="Cerca un bambino…" style="width:100%; padding:11px 12px; border-radius:12px; border:1px solid var(--border); font-size:14px; background:#fff; margin:4px 0 6px;">
@@ -543,7 +543,7 @@
 
 <div class="savebar">
   <span class="save-state" id="saveState">Tutto salvato</span>
-  <button class="save-main" id="saveBtn" disabled>💾 Salva</button>
+  <button class="save-main" id="saveBtn" style="display:none">↻ Riprova</button>
 </div>
 
 <script>
@@ -720,18 +720,20 @@ async function persistAppState(){
 }
 
 let dirty = false;
+let saveFail = false;
 function setSaveUI(){
   const st = document.getElementById("saveState");
   const btn = document.getElementById("saveBtn");
   if(!STORAGE_OK){
     st.textContent = "⚠️ Salvataggio non disponibile qui";
     st.classList.remove("dirty");
-    btn.disabled = true;
+    btn.style.display = "none";
     return;
   }
-  st.textContent = dirty ? "Modifiche non salvate" : "Tutto salvato";
+  if(saveFail){ btn.style.display = ""; btn.disabled = false; st.classList.add("dirty"); return; }
+  btn.style.display = "none";
+  st.textContent = dirty ? "Salvataggio…" : "Tutto salvato";
   st.classList.toggle("dirty", dirty);
-  btn.disabled = !dirty;
 }
 
 async function loadData(){
@@ -783,10 +785,12 @@ async function loadData(){
   render();
 }
 
-// segna che ci sono modifiche da salvare (il salvataggio avviene solo col tasto Salva)
+// segna che ci sono modifiche e le salva da solo dopo un attimo
+let dirtyV = 0, savePromise = null, autoTimer = null;
 function saveData(){
-  dirty = true;
+  dirty = true; dirtyV++;
   setSaveUI();
+  if(STORAGE_OK){ clearTimeout(autoTimer); autoTimer = setTimeout(saveNow, saveFail ? 8000 : 1200); }
 }
 
 let savedFlashTimer = null;
@@ -923,28 +927,36 @@ document.getElementById("lkLista").addEventListener("click", async e=>{
 });
 
 async function saveNow(){
+  clearTimeout(autoTimer);
+  while(savePromise) await savePromise;
   if(!dirty) return;
+  savePromise = salvaOra();
+  try{ await savePromise; } finally { savePromise = null; }
+  if(dirty && !saveFail){ clearTimeout(autoTimer); autoTimer = setTimeout(saveNow, 300); }
+}
+async function salvaOra(){
   const st = document.getElementById("saveState");
-  const btn = document.getElementById("saveBtn");
-  btn.disabled = true;
+  const v = dirtyV;
+  saveFail = false; setSaveUI();
   st.textContent = "Salvataggio…";
   bkAutoCopia();
   const r = await Promise.race([
     persistAppState(),
-    new Promise(res=>setTimeout(()=>res({ ok:false, error:"nessuna risposta dal server, controlla la connessione e riprova" }), 20000))
+    new Promise(res=>setTimeout(()=>res({ ok:false, error:"nessuna risposta dal server, controlla la connessione" }), 20000))
   ]);
   if(r.ok){
     pubblicaGenitori();
     pubblicaGare();
-    dirty = false;
+    if(dirtyV === v) dirty = false;
     st.classList.remove("dirty");
     st.textContent = "✓ Salvato";
     clearTimeout(savedFlashTimer);
     savedFlashTimer = setTimeout(setSaveUI, 1500);
-    btn.disabled = true;
   } else {
-    st.textContent = "Salvataggio non riuscito: " + r.error;
-    btn.disabled = false;
+    saveFail = true;
+    st.textContent = "Non salvato: " + r.error + " · riprovo da solo";
+    setSaveUI();
+    clearTimeout(autoTimer); autoTimer = setTimeout(saveNow, 8000);
   }
 }
 
@@ -988,7 +1000,7 @@ function ricompilaElenco(){
     msg += " (" + daTogliere.slice(0,8).map(p=>p.cognome+" "+p.nome).join(", ") + (daTogliere.length>8 ? "…" : "") + ")";
     if(pasti || versato) msg += "\nAttenzione: con loro si perdono " + pasti + " pasti e " + versato + " € versati.";
   }
-  msg += "\n\nDopo devi premere Salva.";
+  msg += "\n\nIl salvataggio è automatico.";
   if(!confirm(msg)) return;
   let nextId = people.reduce((m,p)=>Math.max(m, p.id||0), 0) + 1;
   const nuovi = lista.map(x=> attuali.get(key(x)) || { ...x, id: nextId++ });
@@ -1869,7 +1881,7 @@ async function bkCaricaCopie(){
   box.textContent = "Carico le copie…";
   try{
     const l = await window.cloudCopie.lista();
-    if(!l.length){ box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">Nessuna copia ancora: la prima si crea da sola al prossimo salvataggio, oppure tocca «Salva una copia adesso».</div>'; return; }
+    if(!l.length){ box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">Nessuna copia ancora: la prima si crea da sola al primo salvataggio del giorno, oppure tocca «Salva una copia adesso».</div>'; return; }
     box.innerHTML = l.map(x=>{
       const sera = x.kind==="sera" && x.sera;
       const titolo = sera ? "Sera del " + new Date(x.sera + "T00:00:00").toLocaleDateString("it-IT", { day:"numeric", month:"short" }) : bkQuando(x.t);
@@ -2512,7 +2524,7 @@ async function gfCarica(file){
   const righe = Array.isArray(lett) ? lett : lett.righe;
   if(righe.length < 3){ gfMsg = "Questo PDF non contiene testo leggibile (forse è una scansione o una foto)."; renderCartelle(); return; }
   const f = gfElabora(righe, file.name, gtModo, lett.pos || null, lett.bytes || null);
-  gfMsg = f ? (f.atleti.length ? "Fatto: trovati " + f.atleti.length + " dei nostri atleti. Controlla i dati e premi Salva." + (f.pdfGrande ? " Il PDF è troppo grande per essere conservato nell'app." : "") : "Il PDF è stato letto ma non ho trovato i nostri atleti. Se i nomi ci sono, mandami il PDF e sistemo.") : "";
+  gfMsg = f ? (f.atleti.length ? "Fatto: trovati " + f.atleti.length + " dei nostri atleti. Controlla i dati: si salva da solo." + (f.pdfGrande ? " Il PDF è troppo grande per essere conservato nell'app." : "") : "Il PDF è stato letto ma non ho trovato i nostri atleti. Se i nomi ci sono, mandami il PDF e sistemo.") : "";
   render();
 }
 async function gfRianalizza(id){
@@ -2524,7 +2536,7 @@ async function gfRianalizza(id){
   if(!confirm("Rianalizzare questo PDF? Le correzioni fatte a mano su questa lista andranno perse.")) return;
   const res = analizza(tt.testo.split("\n"), atletiElenco(), gtModo, tt.pos);
   f.atleti = res.atleti; f.righe = res.righe;
-  gfMsg = "Rianalizzato: " + f.atleti.length + " dei nostri atleti. Premi Salva."; saveData(); render();
+  gfMsg = "Rianalizzato: " + f.atleti.length + " dei nostri atleti. Salvato in automatico."; saveData(); render();
 }
 
 // --- visualizzatore del PDF con i nostri atleti evidenziati in giallo ---
@@ -2670,6 +2682,8 @@ document.getElementById("saveBtn").addEventListener("click", saveNow);
 document.getElementById("seasonDelBtn").addEventListener("click", requestDeleteSeason);
 document.getElementById("seasonFillBtn").addEventListener("click", ricompilaElenco);
 window.addEventListener("beforeunload", (e)=>{ if(dirty){ e.preventDefault(); e.returnValue = ""; } });
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="hidden" && dirty) saveNow(); });
+window.addEventListener("pagehide", ()=>{ if(dirty) saveNow(); });
 
 document.getElementById("seasonAddToggle").addEventListener("click", ()=>{
   document.getElementById("seasonForm").classList.toggle("open");
