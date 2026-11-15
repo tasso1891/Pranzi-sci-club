@@ -9,14 +9,16 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<title>Pranzi · Sci Club</title>
+<title>Sci Club Limone</title>
 <style>
   :root{ --blue:#1D4ED8; --dark:#14306B; --yellow:#F2B705; --bg:#EEF3FF; --ink:#0F1B3D; --soft:#5B6B8F; --border:#D5DEF2; --ok:#1E8E4E; --warn:#B7791F; --bad:#C0392B; }
   *{ box-sizing:border-box; }
   body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
   .top{ background:var(--dark); color:#fff; padding:calc(22px + env(safe-area-inset-top)) 20px 22px; }
   .eyebrow{ font-size:12px; letter-spacing:.14em; font-weight:800; color:var(--yellow); }
-  h1{ margin:4px 0 0; font-size:24px; }
+  h1{ margin:0; font-size:24px; }
+  .logo-row{ display:flex; align-items:center; gap:12px; }
+  .logo-row img{ width:56px; height:56px; border-radius:50%; background:#fff; flex:none; box-shadow:0 2px 8px rgba(0,0,0,.25); }
   main{ padding:16px; max-width:560px; margin:0 auto; }
   .card{ background:#fff; border:1px solid var(--border); border-radius:16px; padding:16px; margin-bottom:12px; }
   .name{ font-size:26px; font-weight:800; line-height:1.15; }
@@ -63,7 +65,7 @@
 </style>
 </head>
 <body>
-<div class="top"><div class="eyebrow">SCI CLUB</div><h1>Registro Pranzi</h1></div>
+<div class="top"><div class="logo-row"><img src="icon-192.png" alt="Sci Club Limone"><h1>Sci Club Limone</h1></div></div>
 <div id="pdfov"><div class="bar"><button id="pdfx">✕</button><div id="pdft"></div><button id="pdfm">−</button><button id="pdfp">+</button></div><div id="pdfpag"></div></div>
 <main id="out"><div class="card vuoto">Caricamento…</div></main>
 <script type="module">
