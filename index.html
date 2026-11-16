@@ -509,6 +509,8 @@
   </div>
   <div class="add-bar">
     <button class="add-toggle" id="rbAddToggle">+ Nuovo contatto</button>
+    <button class="add-toggle" id="rbImpBtn" style="margin-top:8px;">📥 Importa contatti da file (.vcf)</button>
+    <input type="file" id="rbImpFile" accept=".vcf,text/vcard,text/x-vcard,text/plain" style="display:none;">
     <div class="add-form" id="rbAddForm">
       <input id="rbAddNome" placeholder="Nome e cognome">
       <input id="rbAddTel" inputmode="tel" placeholder="Telefono">
@@ -2245,6 +2247,68 @@ document.getElementById("rbAddSave").addEventListener("click", ()=>{
   document.getElementById("rbAddForm").classList.remove("open");
   rbSearch = ""; document.getElementById("rbSearch").value = "";
   rbOpen = id; saveData(); renderRubrica();
+});
+
+// ---------- IMPORT CONTATTI DA FILE .vcf (esportazione rubrica) ----------
+function rbChiaveTel(t){ return String(t||"").replace(/\D/g,"").replace(/^(0039|39)(?=\d{9,})/,""); }
+function rbParseVcf(testo){
+  const out = [], re = /BEGIN:VCARD([\s\S]*?)END:VCARD/gi;
+  let m;
+  while((m = re.exec(testo))){
+    const righe = m[1].replace(/\r/g,"").replace(/\n[ \t]/g,"").split("\n");
+    let fn = "", tel = "", n = "";
+    righe.forEach(r=>{
+      if(/^FN[:;]/i.test(r) && !fn) fn = r.slice(r.indexOf(":")+1).trim();
+      else if(/^N[:;]/i.test(r) && !n) n = r.slice(r.indexOf(":")+1).split(";").filter(Boolean).reverse().join(" ").trim();
+      else if(/^(item\d+\.)?TEL/i.test(r) && !tel) tel = r.slice(r.indexOf(":")+1).trim();
+    });
+    const nome = (fn || n).replace(/^SCL\s+/i, "").replace(/\s+/g," ").trim();
+    if(nome || tel) out.push({ nome, tel });
+  }
+  return out;
+}
+// piano di importazione: salta i doppioni (stesso nome o stesso telefono), collega ai bambini con lo stesso cognome
+function rbPianoImport(contatti){
+  const nomi = new Set(), tels = new Set();
+  rubrica().forEach(c=>{ nomi.add(normNome(c.nome)); const t = rbChiaveTel(c.tel); if(t.length>=6) tels.add(t); });
+  const bambini = lkLista();
+  const nuovi = [], doppi = [];
+  contatti.forEach(c=>{
+    const nn = normNome(c.nome), tt = rbChiaveTel(c.tel);
+    if(!nn){ return; }
+    if(nomi.has(nn) || (tt.length>=6 && tels.has(tt))){ doppi.push(c); return; }
+    nomi.add(nn); if(tt.length>=6) tels.add(tt);
+    const cand = bambini.filter(p=>{ const cg = normNome(p.cognome); return cg && (nn===cg || nn.startsWith(cg + " ")); });
+    const maxL = cand.reduce((a,p)=>Math.max(a, normNome(p.cognome).length), 0);
+    const bb = cand.filter(p=>normNome(p.cognome).length===maxL).map(p=>p.cognome + " " + p.nome);
+    nuovi.push({ nome: c.nome, tel: c.tel, bambini: bb });
+  });
+  return { nuovi, doppi, tot: contatti.length };
+}
+document.getElementById("rbImpBtn").addEventListener("click", ()=>{ document.getElementById("rbImpFile").value = ""; document.getElementById("rbImpFile").click(); });
+document.getElementById("rbImpFile").addEventListener("change", async e=>{
+  const f = e.target.files && e.target.files[0]; if(!f) return;
+  let testo = "";
+  try{ testo = await f.text(); }catch(err){ alert("Non riesco a leggere il file."); return; }
+  const lista = rbParseVcf(testo);
+  if(!lista.length){ alert("Nel file non ho trovato nessun contatto."); return; }
+  const pi = rbPianoImport(lista);
+  const conBamb = pi.nuovi.filter(c=>c.bambini.length), senza = pi.nuovi.filter(c=>!c.bambini.length);
+  let msg = "Contatti nel file: " + pi.tot + "\\n✅ Da aggiungere: " + pi.nuovi.length + "\\n⏭ Già presenti (non copiati): " + pi.doppi.length
+    + "\\n👦 Collegati a un bambino: " + conBamb.length + "\\n❔ Senza bambino con lo stesso cognome: " + senza.length;
+  if(senza.length) msg += "\\n(" + senza.slice(0,6).map(c=>c.nome).join(", ") + (senza.length>6 ? "…" : "") + ")";
+  msg += "\\n\\nImporto?";
+  if(!pi.nuovi.length){ alert("Sono tutti già in rubrica: non c'è niente da aggiungere."); return; }
+  if(!confirm(msg)) return;
+  pi.nuovi.forEach((c,i)=>{
+    const id = Date.now().toString(36) + i.toString(36) + Math.random().toString(36).slice(2,6);
+    const o = { id, nome: c.nome, tel: c.tel, ruolo: "genitore", bambino: "", bambini: [], note: "" };
+    rbImposta(o, c.bambini);
+    rubrica().push(o);
+  });
+  rbSearch = ""; document.getElementById("rbSearch").value = "";
+  saveData(); renderRubrica();
+  alert("Aggiunti " + pi.nuovi.length + " contatti.");
 });
 document.getElementById("tabRubrica").addEventListener("click", ()=>setTab("rubrica"));
 
