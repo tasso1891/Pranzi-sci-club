@@ -905,6 +905,7 @@ async function lkAggiornaOra(){
   try{
     if(!window.cloudGenitori) throw new Error("serve l'accesso online");
     await pubblicaGare(true);
+    await pubblicaNumeri(true);
     await pubblicaPdfGenitori(true);
     const u = lkStagione();
     let n = 0;
@@ -1015,6 +1016,7 @@ async function salvaOra(){
   if(r.ok){
     pubblicaGenitori();
     pubblicaGare();
+    pubblicaNumeri();
     if(dirtyV === v) dirty = false;
     st.classList.remove("dirty");
     st.textContent = "✓ Salvato";
@@ -1154,7 +1156,7 @@ async function creaStagione(label){
   fileGare.forEach(f=>{ if(f.pdf){ if(window.cloudGenitori) window.cloudGenitori.eliminaPdf(f.id).catch(()=>{}); try{ localStorage.removeItem("pranzi_pubpdf_" + f.id); }catch(e){} } });
   seasons = appState.seasons;
   await switchSeason(newId);
-  try{ pubblicaGenitori(); pubblicaGare(true); }catch(e){}
+  try{ pubblicaGenitori(); pubblicaGare(true); pubblicaNumeri(true); }catch(e){}
   return { ok:true, piano };
 }
 async function createSeason(label){
@@ -2790,6 +2792,20 @@ async function pubblicaGare(forza){
   }catch(e){ if(forza) throw e; console.error(e); }
 }
 
+// numeri utili per i genitori: i contatti della Rubrica con ruolo "Staff" (nome, telefono, nota)
+async function pubblicaNumeri(forza){
+  try{
+    if(!window.cloudGenitori) return;
+    const lista = (appState.rubrica || []).filter(c=>c.ruolo==="staff" && String(c.tel||"").replace(/\D/g,"").length>=6)
+      .map(c=>({ n:String(c.nome||""), t:String(c.tel||""), w:rbNumeroWa(c.tel), note:String(c.note||"") }));
+    const h = lkHash(JSON.stringify(lista));
+    let prima = null; try{ prima = localStorage.getItem("pranzi_pubNumeri"); }catch(e){}
+    if(prima===h && !forza) return;
+    await window.cloudGenitori.pubblica("numeri-utili", { v:1, staff:lista, aggiornato:new Date().toISOString() });
+    try{ localStorage.setItem("pranzi_pubNumeri", h); }catch(e){}
+  }catch(e){ if(forza) throw e; console.error(e); }
+}
+
 // ---------- GARE: ORDINE DI PARTENZA E CLASSIFICHE (da PDF) ----------
 let gtModo = "cal";
 const GF = { partenza:{ chiave:"gareStart", titolo:"Ordine di partenza" }, classifica:{ chiave:"gareClass", titolo:"Classifiche" } };
@@ -3548,7 +3564,7 @@ onAuthStateChanged(auth, async u=>{
     started = false; return;
   }
   await window.startApp();
-  try{ pubblicaGare(); pubblicaGenitori(); }catch(e){}
+  try{ pubblicaGare(); pubblicaGenitori(); pubblicaNumeri(); }catch(e){}
   window.cloud.pronto = true;
   if(window.bkControllaSera) window.bkControllaSera();
   if(!existed) await saveNow();

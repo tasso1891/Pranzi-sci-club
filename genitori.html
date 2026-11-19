@@ -161,9 +161,10 @@ if(!token || !/^[A-Za-z0-9]{16,64}$/.test(token)){
 } else {
   try{
     db = getFirestore(initializeApp(firebaseConfig));
-    const [snap, snapGare] = await Promise.all([
+    const [snap, snapGare, snapNum] = await Promise.all([
       getDoc(doc(db, "genitori", token)),
-      getDoc(doc(db, "genitori", "calendario-gare")).catch(()=>null)
+      getDoc(doc(db, "genitori", "calendario-gare")).catch(()=>null),
+      getDoc(doc(db, "genitori", "numeri-utili")).catch(()=>null)
     ]);
     if(!snap.exists()){ errore("Questo link non è ancora attivo o non è più valido. Chiedi un nuovo link a chi gestisce i pranzi."); }
     else{
@@ -253,6 +254,20 @@ if(!token || !/^[A-Za-z0-9]{16,64}$/.test(token)){
         });
         sezione(ic, tit, pn).forEach(x=>frag.append(x));
       });
+
+      // NUMERI UTILI: i contatti dello staff (solo lettura)
+      { const pNum = el("div"), staff = (snapNum && snapNum.exists() && snapNum.data().staff) || [];
+        if(!staff.length) pNum.append(el("div", "card vuoto", "Per ora non ci sono numeri."));
+        staff.forEach(p=>{
+          const c = el("div", "card");
+          c.append(el("div", "gname", p.n));
+          if(p.note) c.append(el("div", "sub", p.note));
+          c.append(el("div", "sub", p.t));
+          const tel = el("a", "btn", "📞 Chiama"); tel.href = "tel:" + String(p.t).replace(/[^\d+]/g, "").replace(/^00/, "+");
+          const wa = el("a", "btn", "💬 WhatsApp"); wa.href = "https://wa.me/" + String(p.w || "").replace(/\D/g, ""); wa.target = "_blank"; wa.rel = "noopener";
+          c.append(tel, wa); pNum.append(c);
+        });
+        sezione("📞", "Numeri utili", pNum).forEach(x=>frag.append(x)); }
 
       // OBIETTIVO: quello scritto sulla scheda del bambino
       const pObb = el("div"), cO = el("div", "card");
