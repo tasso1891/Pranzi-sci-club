@@ -104,7 +104,9 @@ async function apriPdf(it){
     const s = await getDoc(doc(db, "genitori", "pdf-" + it.id));
     if(!s.exists()) throw new Error("PDF non ancora disponibile");
     const lib = await caricaPdfJs();
-    const bin = atob(s.data().b64), bytes = new Uint8Array(bin.length);
+    let b64 = s.data().b64 || "";
+    for(let i = 1; i < (s.data().n || 1); i++){ const x = await getDoc(doc(db, "genitori", "pdf-" + it.id + "-" + i)); if(!x.exists()) throw new Error("PDF non ancora disponibile"); b64 += x.data().b64; }
+    const bin = atob(b64), bytes = new Uint8Array(bin.length);
     for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     const pdf = await lib.getDocument({ data: bytes }).promise;
     box.innerHTML = "";

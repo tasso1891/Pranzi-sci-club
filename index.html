@@ -2636,11 +2636,11 @@ function renderCalPdf(){
 async function calPdfCarica(file){
   const msg = document.getElementById("gaPdfMsg");
   if(vistaArchivio()) return;
-  if(file.size > 650000){ msg.textContent = "Il PDF è troppo grande (massimo circa 650 KB): prova a comprimerlo."; return; }
+  if(file.size > 1500000){ msg.textContent = "Il PDF è troppo grande (massimo circa 1,5 MB): prova a comprimerlo."; return; }
   msg.textContent = "Carico il PDF…";
   try{
     const b64 = bytesInBase64(new Uint8Array(await file.arrayBuffer()));
-    if(b64.length > 900000){ msg.textContent = "Il PDF è troppo grande (massimo circa 650 KB): prova a comprimerlo."; return; }
+    if(b64.length > 2100000){ msg.textContent = "Il PDF è troppo grande (massimo circa 1,5 MB): prova a comprimerlo."; return; }
     if(!window.cloudTesti || !window.cloudGenitori) throw new Error("serve la connessione");
     const id = gfNuovoId();
     await window.cloudTesti.salvaPdf(id, b64);
@@ -3085,7 +3085,7 @@ function gfElabora(righe, nomeFile, tipo, pos, bytes){
     window.cloudTesti.salva(f.id, righe.join("\n"), pos).catch(()=>{});
     if(bytes){
       const b64 = bytesInBase64(bytes);
-      if(b64.length <= 900000){
+      if(b64.length <= 2100000){
         f.pdf = true; window.cloudTesti.salvaPdf(f.id, b64).catch(()=>{});
         if(window.cloudGenitori) window.cloudGenitori.pubblicaPdf(f.id, b64).then(()=>{ try{ localStorage.setItem("pranzi_pubpdf_" + f.id, "1"); }catch(e){} }).catch(()=>{});
       }
@@ -3103,7 +3103,7 @@ async function gfCarica(file){
   const righe = Array.isArray(lett) ? lett : lett.righe;
   if(righe.length < 3){ gfMsg = "Questo PDF non contiene testo leggibile (forse è una scansione o una foto)."; renderCartelle(); return; }
   const f = gfElabora(righe, file.name, gtModo, lett.pos || null, lett.bytes || null);
-  gfMsg = f ? (f.atleti.length ? "Fatto: trovati " + f.atleti.length + " dei nostri atleti. Controlla i dati: si salva da solo." + (f.pdfGrande ? " Il PDF è troppo grande per essere conservato nell'app." : "") : "Il PDF è stato letto ma non ho trovato i nostri atleti. Se i nomi ci sono, mandami il PDF e sistemo.") : "";
+  gfMsg = f ? (f.atleti.length ? "Fatto: trovati " + f.atleti.length + " dei nostri atleti. Controlla i dati: si salva da solo." + (f.pdfGrande ? " Il PDF è troppo grande (oltre 1,5 MB) per essere conservato nell'app: gli atleti sono letti, ma il PDF non si può riaprire." : "") : "Il PDF è stato letto ma non ho trovato i nostri atleti. Se i nomi ci sono, mandami il PDF e sistemo.") : "";
   render();
 }
 async function gfRianalizza(id){
@@ -3528,18 +3528,36 @@ window.cloudTesti = {
     return { testo: d.testo, pos };
   },
   async leggi(id){ const x = await this.leggiTutto(id); return x ? x.testo : null; },
-  async salvaPdf(id, b64){ await setDoc(doc(db, "pranzi", "pdf-" + id), { t: new Date().toISOString(), b64 }); },
-  async leggiPdf(id){ const s = await getDoc(doc(db, "pranzi", "pdf-" + id)); return s.exists() ? s.data().b64 : null; },
+  // i PDF grandi sono divisi in più pezzi (un documento ha un limite di circa 1 MB)
+  async salvaPdf(id, b64){
+    const P = 700000, n = Math.max(1, Math.ceil(b64.length / P));
+    for(let i = 1; i < n; i++) await setDoc(doc(db, "pranzi", "pdf-" + id + "-" + i), { b64: b64.slice(i * P, (i + 1) * P) });
+    await setDoc(doc(db, "pranzi", "pdf-" + id), { t: new Date().toISOString(), b64: b64.slice(0, P), n });
+  },
+  async leggiPdf(id){
+    const s = await getDoc(doc(db, "pranzi", "pdf-" + id)); if(!s.exists()) return null;
+    const d = s.data(); let b = d.b64 || "";
+    for(let i = 1; i < (d.n || 1); i++){ const x = await getDoc(doc(db, "pranzi", "pdf-" + id + "-" + i)); if(!x.exists()) return null; b += x.data().b64; }
+    return b;
+  },
   async elimina(id){
     await deleteDoc(doc(db, "pranzi", "testo-" + id));
     try{ await deleteDoc(doc(db, "pranzi", "pdf-" + id)); }catch(e){}
+    for(let i = 1; i <= 3; i++){ try{ await deleteDoc(doc(db, "pranzi", "pdf-" + id + "-" + i)); }catch(e){} }
   }
 };
 window.cloudGenitori = {
   async pubblica(tok, dati){ await setDoc(doc(db, "genitori", tok), dati); },
   async elimina(tok){ await deleteDoc(doc(db, "genitori", tok)); },
-  async pubblicaPdf(id, b64){ await setDoc(doc(db, "genitori", "pdf-" + id), { t: new Date().toISOString(), b64 }); },
-  async eliminaPdf(id){ await deleteDoc(doc(db, "genitori", "pdf-" + id)); }
+  async pubblicaPdf(id, b64){
+    const P = 700000, n = Math.max(1, Math.ceil(b64.length / P));
+    for(let i = 1; i < n; i++) await setDoc(doc(db, "genitori", "pdf-" + id + "-" + i), { b64: b64.slice(i * P, (i + 1) * P) });
+    await setDoc(doc(db, "genitori", "pdf-" + id), { t: new Date().toISOString(), b64: b64.slice(0, P), n });
+  },
+  async eliminaPdf(id){
+    await deleteDoc(doc(db, "genitori", "pdf-" + id));
+    for(let i = 1; i <= 3; i++){ try{ await deleteDoc(doc(db, "genitori", "pdf-" + id + "-" + i)); }catch(e){} }
+  }
 };
 
 $("loginBtn").onclick = async ()=>{
